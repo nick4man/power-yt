@@ -1,5 +1,12 @@
 # ⚡ power-yt — самостоятельный медиа-стек на Docker
 
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Jellyfin](https://img.shields.io/badge/Jellyfin-NVENC-00A4DC?logo=jellyfin&logoColor=white)
+![Storage](https://img.shields.io/badge/storage-TrueNAS%20%2F%20NFS-0095D5)
+![SSO](https://img.shields.io/badge/SSO-Keycloak%20%2B%20oauth2--proxy-4D4D4D)
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+
 Автоматизированная домашняя медиа-инфраструктура: **Jellyfin + *arr + qBittorrent + Seerr**,
 хранилище на **TrueNAS (ZFS) по NFS**, аппаратное транскодирование **NVIDIA NVENC**,
 внешний доступ через **Traefik (VDS) по WireGuard** и единый вход **SSO (Keycloak + oauth2-proxy)**.
@@ -115,6 +122,10 @@ docs/                       # runbook + Traefik-конфиг VDS
 auth/                       # Keycloak+oauth2-proxy (SSO) + локальная эмуляция
 .github/workflows/          # CI/CD
 ```
+
+## 📄 Лицензия
+
+[MIT](LICENSE) — используйте, изменяйте и распространяйте свободно.
 
 ---
 
