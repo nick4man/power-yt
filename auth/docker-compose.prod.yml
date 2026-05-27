@@ -1,0 +1,27 @@
+# ═════════════════════════════════════════════════════════════════════
+#  Прод-оверрайд для ТРЕТЬЕЙ МАШИНЫ (поверх docker-compose.yml).
+#  Применяется ТОЛЬКО с профилем core (edge-роль играет реальный Traefik на VDS).
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d
+#  Отличия от локального стенда:
+#    - порты keycloak/oauth2-proxy публикуются на WG-адрес (${BIND_IP}) → их видит VDS-Traefik
+#    - Keycloak: start (strict hostname), health включён
+#    - oauth2-proxy: secure-cookie (за HTTPS на VDS)
+#  Значения — из .env (на проде генерируется CI из GitHub Secrets).
+# ═════════════════════════════════════════════════════════════════════
+services:
+  keycloak:
+    command: ["start"]
+    environment:
+      KC_HOSTNAME: ${KC_HOSTNAME_URL}        # https://login.victory62.org
+      KC_HOSTNAME_STRICT: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+    ports:
+      - "${BIND_IP}:8080:8080"               # VDS-Traefik → http://<WG>:8080 (login.victory62.org)
+
+  oauth2-proxy:
+    environment:
+      OAUTH2_PROXY_COOKIE_SECURE: "true"     # за HTTPS на VDS
+    ports:
+      - "${BIND_IP}:4180:4180"               # forwardAuth-цель для VDS-Traefik

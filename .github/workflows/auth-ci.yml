@@ -1,0 +1,100 @@
+name: auth-ci
+
+# Миграция auth-стека (Keycloak + oauth2-proxy, профиль core) на третью машину.
+# validate — на любом push/PR; deploy — вручную (workflow_dispatch) или push в main.
+
+on:
+  push:
+    branches: [main]
+    paths: ['auth/**', '.github/workflows/auth-ci.yml']
+  pull_request:
+    paths: ['auth/**']
+  workflow_dispatch: {}
+
+jobs:
+  # ── 1. Валидация compose (без секретов, на раннере) ──
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose (local emulation + prod override)
+        working-directory: auth
+        run: |
+          cat > .env <<'EOF'
+          KC_DB_PASSWORD=dummy
+          KC_ADMIN_USER=admin
+          KC_ADMIN_PASSWORD=dummy
+          KC_PUBLIC_HOST=kc.lab.test
+          KC_HOSTNAME_URL=http://kc.lab.test:8480
+          OIDC_ISSUER_URL=http://kc.lab.test:8480/realms/media
+          OAUTH2_CLIENT_ID=media-proxy
+          OAUTH2_CLIENT_SECRET=dummy
+          OAUTH2_COOKIE_SECRET=0123456789abcdef0123456789abcdef
+          COOKIE_DOMAIN=.lab.test
+          BIND_IP=127.0.0.1
+          EOF
+          docker compose --profile core --profile emulation config -q
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core config -q
+          rm -f .env
+          echo "✓ compose валиден (emulation + prod)"
+
+  # ── 2. Деплой core на третью машину по SSH ──
+  deploy:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production       # включите required reviewers в настройках окружения
+    env:
+      SSHP: ${{ secrets.THIRD_SSH_PORT || '22' }}
+      DEST: ${{ secrets.THIRD_USER }}@${{ secrets.THIRD_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.THIRD_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "$SSHP" "${{ secrets.THIRD_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync auth/ → third machine (без локальных артефактов)
+        run: |
+          rsync -az --delete \
+            --exclude 'data/' --exclude '.env' --exclude '*.sh' \
+            --exclude 'traefik-edge/' --exclude '.env.example' \
+            -e "ssh -i ~/.ssh/id_deploy -p $SSHP" \
+            auth/ "$DEST:~/auth/"
+
+      - name: Write prod .env from secrets
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSHP" "$DEST" 'umask 077; cat > ~/auth/.env' <<EOF
+          KC_DB_PASSWORD=${{ secrets.KC_DB_PASSWORD }}
+          KC_ADMIN_USER=${{ secrets.KC_ADMIN_USER }}
+          KC_ADMIN_PASSWORD=${{ secrets.KC_ADMIN_PASSWORD }}
+          KC_PUBLIC_HOST=login.victory62.org
+          KC_HOSTNAME_URL=https://login.victory62.org
+          OIDC_ISSUER_URL=https://login.victory62.org/realms/media
+          OAUTH2_CLIENT_ID=${{ secrets.OAUTH2_CLIENT_ID }}
+          OAUTH2_CLIENT_SECRET=${{ secrets.OAUTH2_CLIENT_SECRET }}
+          OAUTH2_COOKIE_SECRET=${{ secrets.OAUTH2_COOKIE_SECRET }}
+          COOKIE_DOMAIN=.victory62.org
+          BIND_IP=${{ secrets.THIRD_WG_IP }}
+          EOF
+
+      - name: Deploy core profile
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSHP" "$DEST" '
+            cd ~/auth &&
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core pull &&
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d --remove-orphans'
+
+      - name: Smoke test
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSHP" "$DEST" '
+            cd ~/auth &&
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core ps &&
+            for i in $(seq 1 20); do
+              docker logs oauth2-proxy 2>&1 | grep -q "OAuthProxy configured" && { echo "✓ oauth2-proxy сконфигурирован (OIDC discovery ок)"; exit 0; }
+              sleep 5
+            done
+            echo "✗ oauth2-proxy не поднялся (проверьте DNS login.victory62.org и маршрут VDS→WG)"; docker logs oauth2-proxy 2>&1 | tail -15; exit 1'

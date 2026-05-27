@@ -1,0 +1,109 @@
+# ═════════════════════════════════════════════════════════════════════
+#  Auth-среда: Keycloak (OIDC IdP) + Postgres + oauth2-proxy (forward-auth).
+#  Изолирована от media-стека. Разнос по сетям:
+#    auth_backend (internal: true) — БД + внутренний трафик, без интернета
+#    auth_edge    (bridge)         — эмулирует WG-канал к VDS-Traefik
+#
+#  ПРОФИЛИ:
+#    core      — keycloak-db, keycloak, oauth2-proxy  → это «третья машина» (мигрируется CI)
+#    emulation — traefik-edge (≈ VDS Traefik) + whoami (≈ защищаемое приложение) → только локально
+#
+#  Локально:        docker compose --profile core --profile emulation up -d
+#  На 3-й машине:   docker compose --profile core up -d   (edge = реальный Traefik на VDS)
+#  Значения — в auth/.env
+# ═════════════════════════════════════════════════════════════════════
+services:
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: kc-db
+    restart: unless-stopped
+    profiles: [core]
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    volumes:
+      - ./data/keycloak-db:/var/lib/postgresql/data
+    networks: [auth_backend]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    restart: unless-stopped
+    profiles: [core]
+    command: start-dev          # локально: без строгой проверки hostname/TLS; в проде → start --optimized
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://kc-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME: ${KC_HOSTNAME_URL}      # фикс issuer (совпадает с OIDC_ISSUER_URL)
+    depends_on: [keycloak-db]
+    networks: [auth_backend, auth_edge]
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: oauth2-proxy
+    restart: unless-stopped
+    profiles: [core]
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${OIDC_ISSUER_URL}
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET}
+      OAUTH2_PROXY_COOKIE_DOMAINS: ${COOKIE_DOMAIN}
+      OAUTH2_PROXY_WHITELIST_DOMAINS: ${COOKIE_DOMAIN}
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_COOKIE_SECURE: "false"     # локально http; в проде → true
+      OAUTH2_PROXY_UPSTREAMS: "static://202"
+      OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL: "true"
+    # issuer-хост kc.lab резолвится через сетевой alias traefik-edge в auth_edge
+    depends_on: [keycloak]
+    networks: [auth_backend, auth_edge]
+
+  # ── эмуляция edge (VDS Traefik) — только локально ──
+  traefik-edge:
+    image: traefik:latest
+    container_name: traefik-edge
+    restart: unless-stopped
+    profiles: [emulation]
+    command:
+      - --providers.file.directory=/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:8480     # порт совпадает внутри и снаружи (issuer kc.lab:8480)
+      - --api.insecure=true
+      - --api.dashboard=true
+    ports:
+      - "127.0.0.1:8480:8480"      # http edge (kc.lab / app.lab)
+      - "127.0.0.1:8481:8080"      # dashboard
+    volumes:
+      - ./traefik-edge:/dynamic:ro
+    networks:
+      auth_edge:
+        aliases: [kc.lab.test, app.lab.test]   # oauth2-proxy резолвит issuer-хост через docker DNS
+
+  whoami:
+    image: traefik/whoami:latest
+    container_name: auth-whoami
+    restart: unless-stopped
+    profiles: [emulation]
+    networks: [auth_edge]
+
+networks:
+  auth_backend:
+    name: auth_backend
+    driver: bridge
+    internal: true
+  auth_edge:
+    name: auth_edge
+    driver: bridge

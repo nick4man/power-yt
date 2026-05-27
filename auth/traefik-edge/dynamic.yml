@@ -1,0 +1,34 @@
+# Edge-Traefik (эмуляция VDS) — динамическая конфигурация.
+# Хосты для теста: kc.lab (Keycloak), app.lab (защищаемое приложение whoami).
+# Тестировать через:  curl --resolve kc.lab:8480:127.0.0.1 / app.lab:8480:127.0.0.1
+http:
+  middlewares:
+    forward-auth:
+      forwardAuth:
+        address: "http://oauth2-proxy:4180/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Access-Token
+  routers:
+    kc:
+      rule: "Host(`kc.lab.test`)"
+      service: keycloak
+      entryPoints: [web]
+    # /oauth2/* (sign_in, start, callback, auth) → oauth2-proxy, без auth, высокий приоритет
+    oauth2:
+      rule: "Host(`app.lab.test`) && PathPrefix(`/oauth2/`)"
+      service: oauth2-proxy
+      entryPoints: [web]
+      priority: 100
+    # защищаемое приложение
+    app:
+      rule: "Host(`app.lab.test`)"
+      service: whoami
+      entryPoints: [web]
+      middlewares: [forward-auth]
+  services:
+    keycloak:     { loadBalancer: { servers: [{ url: "http://keycloak:8080" }] } }
+    oauth2-proxy: { loadBalancer: { servers: [{ url: "http://oauth2-proxy:4180" }] } }
+    whoami:       { loadBalancer: { servers: [{ url: "http://whoami:80" }] } }
