@@ -1,104 +1,104 @@
 # ─────────────────────────────────────────────────────────────────────────
 #  Traefik dynamic config (file provider) — деплой на VDS.
-#  Гибрид: Jellyfin/Seerr/qBittorrent — поддомены; *arr — пути на media.victory62.org.
-#  Трафик: VDS → WireGuard → хост 10.10.0.189:<порт>.
+#  Гибрид: Jellyfin/Seerr/qBittorrent — поддомены; *arr — пути на media.example.com.
+#  Трафик: VDS → WireGuard → хост <WG_HOST_IP>:<порт>.
 #  entryPoint=websecure, certResolver=cloudflare (DNS-01, CF_DNS_API_TOKEN уже в env Traefik).
 #
 #  ВАЖНО: имена роутеров/сервисов в file-провайдере ГЛОБАЛЬНЫЕ на весь Traefik,
 #  поэтому здесь все с префиксом media-* (чтобы не конфликтовать с config.yml,
-#  где уже есть, например, router/service `jellyfin` для jellyfin.sodix.org).
+#  где уже есть, например, router/service `jellyfin` для jellyfin.example.com).
 #  Имя не влияет на URL — его задаёт rule.
 #
-#  Установка: scp в каталог file-провайдера (/home/q/ubuntu_rep/traefik/config/),
+#  Установка: scp в каталог file-провайдера (<traefik-dir>/config/),
 #  Traefik watch=true подхватит сам. DNS: A-записи media/jellyfin.media/requests.media/
-#  qb.media .victory62.org → белый IP VDS.
+#  qb.media .example.com → белый IP VDS.
 # ─────────────────────────────────────────────────────────────────────────
 http:
   routers:
     # ── Поддомены ──────────────────────────────────────────────
     media-jellyfin:
-      rule: "Host(`jellyfin.media.victory62.org`)"
+      rule: "Host(`jellyfin.media.example.com`)"
       service: media-jellyfin
       entryPoints: [websecure]
       tls: { certResolver: cloudflare }
     media-seerr:
-      rule: "Host(`requests.media.victory62.org`)"
+      rule: "Host(`requests.media.example.com`)"
       service: media-seerr
       entryPoints: [websecure]
       tls: { certResolver: cloudflare }
     media-qbittorrent:
-      rule: "Host(`qb.media.victory62.org`)"
+      rule: "Host(`qb.media.example.com`)"
       service: media-qbittorrent
       entryPoints: [websecure]
       tls: { certResolver: cloudflare }
     # admin-инструменты (своя авторизация слабая/отсутствует → basic-auth)
     media-cleanuparr:
-      rule: "Host(`cleanuparr.media.victory62.org`)"
+      rule: "Host(`cleanuparr.media.example.com`)"
       service: media-cleanuparr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-jellystat:
-      rule: "Host(`jellystat.media.victory62.org`)"
+      rule: "Host(`jellystat.media.example.com`)"
       service: media-jellystat
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-tdarr:
-      rule: "Host(`tdarr.media.victory62.org`)"
+      rule: "Host(`tdarr.media.example.com`)"
       service: media-tdarr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
 
-    # ── Пути на media.victory62.org (URL Base выставлен в приложениях; admin под basic-auth) ──
+    # ── Пути на media.example.com (URL Base выставлен в приложениях; admin под basic-auth) ──
     media-sonarr:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/sonarr`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/sonarr`)"
       service: media-sonarr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-radarr:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/radarr`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/radarr`)"
       service: media-radarr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-lidarr:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/lidarr`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/lidarr`)"
       service: media-lidarr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-whisparr:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/whisparr`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/whisparr`)"
       service: media-whisparr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-prowlarr:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/prowlarr`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/prowlarr`)"
       service: media-prowlarr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
     media-bazarr:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/bazarr`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/bazarr`)"
       service: media-bazarr
       entryPoints: [websecure]
       middlewares: [basic-auth@file]
       tls: { certResolver: cloudflare }
 
   services:
-    media-jellyfin:    { loadBalancer: { servers: [{ url: "http://10.10.0.189:8096" }] } }
-    media-seerr:       { loadBalancer: { servers: [{ url: "http://10.10.0.189:5055" }] } }
-    media-qbittorrent: { loadBalancer: { servers: [{ url: "http://10.10.0.189:8080" }] } }
-    media-sonarr:      { loadBalancer: { servers: [{ url: "http://10.10.0.189:8989" }] } }
-    media-radarr:      { loadBalancer: { servers: [{ url: "http://10.10.0.189:7878" }] } }
-    media-lidarr:      { loadBalancer: { servers: [{ url: "http://10.10.0.189:8686" }] } }
-    media-whisparr:    { loadBalancer: { servers: [{ url: "http://10.10.0.189:6969" }] } }
-    media-prowlarr:    { loadBalancer: { servers: [{ url: "http://10.10.0.189:9696" }] } }
-    media-bazarr:      { loadBalancer: { servers: [{ url: "http://10.10.0.189:6767" }] } }
-    media-cleanuparr:  { loadBalancer: { servers: [{ url: "http://10.10.0.189:11011" }] } }
-    media-jellystat:   { loadBalancer: { servers: [{ url: "http://10.10.0.189:3000" }] } }
-    media-tdarr:       { loadBalancer: { servers: [{ url: "http://10.10.0.189:8265" }] } }
+    media-jellyfin:    { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:8096" }] } }
+    media-seerr:       { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:5055" }] } }
+    media-qbittorrent: { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:8080" }] } }
+    media-sonarr:      { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:8989" }] } }
+    media-radarr:      { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:7878" }] } }
+    media-lidarr:      { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:8686" }] } }
+    media-whisparr:    { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:6969" }] } }
+    media-prowlarr:    { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:9696" }] } }
+    media-bazarr:      { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:6767" }] } }
+    media-cleanuparr:  { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:11011" }] } }
+    media-jellystat:   { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:3000" }] } }
+    media-tdarr:       { loadBalancer: { servers: [{ url: "http://<WG_HOST_IP>:8265" }] } }

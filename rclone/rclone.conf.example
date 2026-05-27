@@ -27,7 +27,7 @@ type = onedrive
 # ── (опционально) NAS как ещё один remote ──
 # [nas]
 # type = sftp                  # или smb / nfs-mount на хосте
-# host = 192.168.0.12
+# host = <NAS_IP>
 # user =
 # key_file =
 

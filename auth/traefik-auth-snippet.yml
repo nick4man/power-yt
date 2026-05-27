@@ -5,9 +5,9 @@
 #
 #  Порядок включения:
 #   1) auth-стек запущен, realm `media` + client `media-proxy` созданы (см. README).
-#   2) DNS: login.victory62.org → белый IP VDS.
-#   3) Залить этот файл; убедиться, что login.victory62.org открывает Keycloak.
-#   4) В traefik-media.victory62.org.yml заменить у admin-роутеров
+#   2) DNS: login.example.com → белый IP VDS.
+#   3) Залить этот файл; убедиться, что login.example.com открывает Keycloak.
+#   4) В traefik-media.example.com.yml заменить у admin-роутеров
 #      middlewares: [basic-auth@file]  →  middlewares: [media-forward-auth@file]
 #      (и добавить /oauth2-роутеры для поддоменных admin-приложений — см. ниже).
 # ─────────────────────────────────────────────────────────────────────────
@@ -29,40 +29,40 @@ http:
   routers:
     # Keycloak (публичная морда логина)
     media-keycloak:
-      rule: "Host(`login.victory62.org`)"
+      rule: "Host(`login.example.com`)"
       service: media-keycloak
       entryPoints: [websecure]
       tls: { certResolver: cloudflare }
 
     # /oauth2/* (sign_in, callback, auth) → oauth2-proxy. По одному на каждый защищаемый ХОСТ.
-    # media.victory62.org покрывает все path-арр (/sonarr…/bazarr) одним роутером:
+    # media.example.com покрывает все path-арр (/sonarr…/bazarr) одним роутером:
     oauth2-media:
-      rule: "Host(`media.victory62.org`) && PathPrefix(`/oauth2/`)"
+      rule: "Host(`media.example.com`) && PathPrefix(`/oauth2/`)"
       service: media-oauth2
       entryPoints: [websecure]
       priority: 100
       tls: { certResolver: cloudflare }
     # для поддоменных admin-приложений — свой /oauth2 на каждый хост:
     oauth2-qb:
-      rule: "Host(`qb.media.victory62.org`) && PathPrefix(`/oauth2/`)"
+      rule: "Host(`qb.media.example.com`) && PathPrefix(`/oauth2/`)"
       service: media-oauth2
       entryPoints: [websecure]
       priority: 100
       tls: { certResolver: cloudflare }
     oauth2-cleanuparr:
-      rule: "Host(`cleanuparr.media.victory62.org`) && PathPrefix(`/oauth2/`)"
+      rule: "Host(`cleanuparr.media.example.com`) && PathPrefix(`/oauth2/`)"
       service: media-oauth2
       entryPoints: [websecure]
       priority: 100
       tls: { certResolver: cloudflare }
     oauth2-jellystat:
-      rule: "Host(`jellystat.media.victory62.org`) && PathPrefix(`/oauth2/`)"
+      rule: "Host(`jellystat.media.example.com`) && PathPrefix(`/oauth2/`)"
       service: media-oauth2
       entryPoints: [websecure]
       priority: 100
       tls: { certResolver: cloudflare }
     oauth2-tdarr:
-      rule: "Host(`tdarr.media.victory62.org`) && PathPrefix(`/oauth2/`)"
+      rule: "Host(`tdarr.media.example.com`) && PathPrefix(`/oauth2/`)"
       service: media-oauth2
       entryPoints: [websecure]
       priority: 100

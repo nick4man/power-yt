@@ -12,13 +12,13 @@ services:
   keycloak:
     command: ["start"]
     environment:
-      KC_HOSTNAME: ${KC_HOSTNAME_URL}        # https://login.victory62.org
+      KC_HOSTNAME: ${KC_HOSTNAME_URL}        # https://login.example.com
       KC_HOSTNAME_STRICT: "true"
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
     ports:
-      - "${BIND_IP}:8080:8080"               # VDS-Traefik → http://<WG>:8080 (login.victory62.org)
+      - "${BIND_IP}:8080:8080"               # VDS-Traefik → http://<WG>:8080 (login.example.com)
 
   oauth2-proxy:
     environment:

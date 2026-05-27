@@ -9,7 +9,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Mount]
-What=192.168.0.12:/mnt/media/data
+What=<NAS_IP>:/mnt/media/data
 Where=/mnt/storage/data
 Type=nfs4
 # hard — целостность записи; nconnect — параллельные TCP-сессии для пропускной способности.

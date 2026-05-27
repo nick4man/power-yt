@@ -4,9 +4,9 @@
 Защищает admin-приложения media-стека единым входом (SSO) через Traefik(VDS) forward-auth.
 
 ```
-браузер → media.victory62.org/<app> → Traefik(VDS)
+браузер → media.example.com/<app> → Traefik(VDS)
         → forwardAuth → oauth2-proxy(third:4180)  [нет сессии?]
-        → редирект → Keycloak(login.victory62.org) → логин → cookie .victory62.org → доступ
+        → редирект → Keycloak(login.example.com) → логин → cookie .example.com → доступ
 ```
 
 Jellyfin/Seerr НЕ закрываем (своя авторизация + клиенты не умеют SSO-редирект).
@@ -29,28 +29,28 @@ cp .env.example .env
 ```bash
 docker compose up -d keycloak-db keycloak
 ```
-- DNS: `login.victory62.org` → белый IP VDS (Cloudflare A-запись).
+- DNS: `login.example.com` → белый IP VDS (Cloudflare A-запись).
 - На VDS залить `traefik-auth-snippet.yml` в `/config` (заменив `<THIRD_WG>`), чтобы
-  `https://login.victory62.org` открывал Keycloak (серт — Cloudflare DNS-01).
+  `https://login.example.com` открывал Keycloak (серт — Cloudflare DNS-01).
 
-## 4. Настройка Keycloak (веб-админка login.victory62.org)
+## 4. Настройка Keycloak (веб-админка login.example.com)
 1. Войти как `KC_ADMIN_USER`.
 2. Создать **Realm** `media`.
 3. **Clients → Create**: Client ID `media-proxy`, тип **OpenID Connect**, **Client authentication = On**
    (confidential), Standard flow.
-   - **Valid redirect URIs**: `https://*.victory62.org/oauth2/callback` и `https://media.victory62.org/oauth2/callback`
-   - **Web origins**: `https://media.victory62.org` (или `+`).
+   - **Valid redirect URIs**: `https://*.example.com/oauth2/callback` и `https://media.example.com/oauth2/callback`
+   - **Web origins**: `https://media.example.com` (или `+`).
 4. **Clients → media-proxy → Credentials** → скопировать **Client secret** → в `.env` `OAUTH2_CLIENT_SECRET`.
 5. Завести пользователей (Users) / при желании группы и политики.
 
 ## 5. Запуск oauth2-proxy
 ```bash
 docker compose up -d oauth2-proxy
-docker logs oauth2-proxy   # должен подключиться к issuer https://login.victory62.org/realms/media
+docker logs oauth2-proxy   # должен подключиться к issuer https://login.example.com/realms/media
 ```
 
 ## 6. Включить защиту на Traefik (VDS)
-В `traefik-media.victory62.org.yml` (на VDS) у admin-роутеров заменить:
+В `traefik-media.example.com.yml` (на VDS) у admin-роутеров заменить:
 ```
 middlewares: [basic-auth@file]   →   middlewares: [media-forward-auth@file]
 ```
@@ -59,12 +59,12 @@ middlewares: [basic-auth@file]   →   middlewares: [media-forward-auth@file]
 admin-URL: должно редиректить на Keycloak, после входа — пускать.
 
 ## Проверка
-- `https://login.victory62.org` — страница Keycloak, валидный серт.
-- `https://media.victory62.org/sonarr` без сессии → редирект на Keycloak → после логина → Sonarr.
-- Один вход открывает все admin-приложения (SSO, cookie на `.victory62.org`).
+- `https://login.example.com` — страница Keycloak, валидный серт.
+- `https://media.example.com/sonarr` без сессии → редирект на Keycloak → после логина → Sonarr.
+- Один вход открывает все admin-приложения (SSO, cookie на `.example.com`).
 
 ## Заметки
-- Cookie-домен `.victory62.org` → одна сессия на все поддомены и пути.
+- Cookie-домен `.example.com` → одна сессия на все поддомены и пути.
 - MFA/политики — в Keycloak (Authentication flows, Required actions).
 - Если нужен OIDC-логин в самом Jellyfin — это отдельно (плагин SSO для Jellyfin + client в Keycloak),
   не через forward-auth.
@@ -93,9 +93,9 @@ Workflow: `.github/workflows/auth-ci.yml`. Два этапа:
 | `OAUTH2_CLIENT_SECRET` | секрет клиента из Keycloak |
 | `OAUTH2_COOKIE_SECRET` | cookie-секрет (16/24/32 байта) |
 
-Прод-значения доменов зашиты в workflow: `login.victory62.org`, issuer `https://login.victory62.org/realms/media`, `COOKIE_DOMAIN=.victory62.org`.
+Прод-значения доменов зашиты в workflow: `login.example.com`, issuer `https://login.example.com/realms/media`, `COOKIE_DOMAIN=.example.com`.
 
 ### Что вне CI (одноразово, на проде)
-1. DNS: `login.victory62.org` → белый IP VDS (Cloudflare).
+1. DNS: `login.example.com` → белый IP VDS (Cloudflare).
 2. VDS-Traefik: залить `traefik-auth-snippet.yml` (заменив `<THIRD_WG>`), переключить admin-роутеры `basic-auth@file → media-forward-auth@file`.
-3. В Keycloak realm `media`: создать клиент `media-proxy` (redirect `https://*.victory62.org/oauth2/callback`) и пользователей. Локальный стенд это уже делает скриптом — на проде повторить через admin API/UI.
+3. В Keycloak realm `media`: создать клиент `media-proxy` (redirect `https://*.example.com/oauth2/callback`) и пользователей. Локальный стенд это уже делает скриптом — на проде повторить через admin API/UI.
