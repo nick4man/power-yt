@@ -1,0 +1,309 @@
+# ═════════════════════════════════════════════════════════════════════
+#  media-stack — Jellyfin + *arr + qBittorrent + Jellyseerr
+#  Хранилище: общий /data = NFS-датасет TrueNAS (systemd/mnt-storage-data.mount)
+#  GPU: NVIDIA NVENC через runtime: nvidia (только Jellyfin)
+#  Доступ: порты на BIND_IP (WireGuard), внешний Traefik на VDS
+#  SELinux: /data без :z (NFS) — доступ через булин virt_use_nfs=on; config с :Z (локальный btrfs)
+#  Все переменные — в .env (см. .env.example)
+# ═════════════════════════════════════════════════════════════════════
+
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  UMASK: ${UMASK}
+  TZ: ${TZ}
+
+x-svc-defaults: &svc-defaults
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  networks: [arr-net]
+  labels:
+    autoheal: "true"          # подхватывает уже работающий контейнер willfarrell/autoheal
+
+services:
+  # ── Медиасервер ──────────────────────────────────────────────────
+  jellyfin:
+    <<: *svc-defaults
+    container_name: jellyfin
+    image: ${JELLYFIN_IMAGE}
+    runtime: nvidia                       # NVIDIA Container Runtime (RTX 3070 Ti → NVENC)
+    environment:
+      <<: *common-env
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    ports:
+      - "${BIND_IP}:${JELLYFIN_PORT}:8096"
+    volumes:
+      - ./jellyfin/config:/config:Z
+      - ./jellyfin/cache:/config/cache:Z
+      - ./jellyfin/transcode:/transcode:Z
+      - ${DATA_ROOT}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  # ── Управление сериалами / фильмами ──────────────────────────────
+  sonarr:
+    <<: *svc-defaults
+    container_name: sonarr
+    image: ${SONARR_IMAGE}
+    environment: *common-env
+    ports:
+      - "${BIND_IP}:${SONARR_PORT}:8989"
+    volumes:
+      - ./sonarr/config:/config:Z
+      - ${DATA_ROOT}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  radarr:
+    <<: *svc-defaults
+    container_name: radarr
+    image: ${RADARR_IMAGE}
+    environment: *common-env
+    ports:
+      - "${BIND_IP}:${RADARR_PORT}:7878"
+    volumes:
+      - ./radarr/config:/config:Z
+      - ${DATA_ROOT}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Индексаторы ──────────────────────────────────────────────────
+  prowlarr:
+    <<: *svc-defaults
+    container_name: prowlarr
+    image: ${PROWLARR_IMAGE}
+    environment: *common-env
+    ports:
+      - "${BIND_IP}:${PROWLARR_PORT}:9696"
+    volumes:
+      - ./prowlarr/config:/config:Z
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9696/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Субтитры ─────────────────────────────────────────────────────
+  bazarr:
+    <<: *svc-defaults
+    container_name: bazarr
+    image: ${BAZARR_IMAGE}
+    environment: *common-env
+    ports:
+      - "${BIND_IP}:${BAZARR_PORT}:6767"
+    volumes:
+      - ./bazarr/config:/config:Z
+      - ${DATA_ROOT}:/data
+    depends_on: [sonarr, radarr]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:6767/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Загрузки (torrent, без VPN) ──────────────────────────────────
+  qbittorrent:
+    <<: *svc-defaults
+    container_name: qbittorrent
+    image: ${QBIT_IMAGE}
+    environment:
+      <<: *common-env
+      WEBUI_PORTS: "8080/tcp,8080/udp"
+    ports:
+      - "${BIND_IP}:${QBIT_WEBUI_PORT}:8080"   # WebUI — только на WG/LAN
+      - "${QBIT_BT_PORT}:6881/tcp"             # входящие пиры (проброс на роутере)
+      - "${QBIT_BT_PORT}:6881/udp"
+    volumes:
+      - ./qbittorrent/config:/config:Z
+      - ${DATA_ROOT}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Портал запросов ──────────────────────────────────────────────
+  jellyseerr:
+    <<: *svc-defaults
+    container_name: jellyseerr
+    image: ${JELLYSEERR_IMAGE}
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ}
+    ports:
+      - "${BIND_IP}:${JELLYSEERR_PORT}:5055"
+    volumes:
+      - ./jellyseerr/config:/app/config:Z
+    depends_on: [jellyfin, sonarr, radarr]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5055/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Музыка ──────────────────────────────────────────────────────
+  lidarr:
+    <<: *svc-defaults
+    container_name: lidarr
+    image: ${LIDARR_IMAGE}
+    environment: *common-env
+    ports:
+      - "${BIND_IP}:${LIDARR_PORT}:8686"
+    volumes:
+      - ./lidarr/config:/config:Z
+      - ${DATA_ROOT}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8686/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Adult (xxx) ──────────────────────────────────────────────────
+  whisparr:
+    <<: *svc-defaults
+    container_name: whisparr
+    image: ${WHISPARR_IMAGE}
+    environment: *common-env
+    ports:
+      - "${BIND_IP}:${WHISPARR_PORT}:6969"
+    volumes:
+      - ./whisparr/config:/config:Z
+      - ${DATA_ROOT}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:6969/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ── Recyclarr: TRaSH quality profiles / custom formats → Sonarr/Radarr ──
+  recyclarr:
+    <<: *svc-defaults
+    container_name: recyclarr
+    image: ${RECYCLARR_IMAGE}
+    environment:
+      <<: *common-env
+      CRON_SCHEDULE: "@daily"
+      RECYCLARR_CREATE_CONFIG: "false"
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      RADARR_API_KEY: ${RADARR_API_KEY}
+    volumes:
+      - ./recyclarr/config:/config:Z
+
+  # ── Unpackerr: распаковка .rar-релизов для импорта arr ──
+  unpackerr:
+    <<: *svc-defaults
+    container_name: unpackerr
+    image: ${UNPACKERR_IMAGE}
+    user: "${PUID}:${PGID}"
+    environment:
+      TZ: ${TZ}
+      UN_SONARR_0_URL: http://sonarr:8989/sonarr
+      UN_SONARR_0_API_KEY: ${SONARR_API_KEY}
+      UN_RADARR_0_URL: http://radarr:7878/radarr
+      UN_RADARR_0_API_KEY: ${RADARR_API_KEY}
+      UN_LIDARR_0_URL: http://lidarr:8686/lidarr
+      UN_LIDARR_0_API_KEY: ${LIDARR_API_KEY}
+      UN_WHISPARR_0_URL: http://whisparr:6969/whisparr
+      UN_WHISPARR_0_API_KEY: ${WHISPARR_API_KEY}
+    volumes:
+      - ${DATA_ROOT}:/data
+
+  # ── Cleanuparr: чистка зависших/мусорных загрузок (web UI) ──
+  cleanuparr:
+    <<: *svc-defaults
+    container_name: cleanuparr
+    image: ${CLEANUPARR_IMAGE}
+    environment:
+      <<: *common-env
+    ports:
+      - "${BIND_IP}:${CLEANUPARR_PORT}:11011"
+    volumes:
+      - ./cleanuparr/config:/config:Z
+
+  # ── Jellystat: статистика Jellyfin (требует Postgres) ──
+  jellystat-db:
+    <<: *svc-defaults
+    container_name: jellystat-db
+    image: ${JELLYSTAT_DB_IMAGE}
+    environment:
+      POSTGRES_USER: jellystat
+      POSTGRES_PASSWORD: ${JELLYSTAT_PG_PASSWORD}
+      POSTGRES_DB: jfstat
+    volumes:
+      - ./jellystat/db:/var/lib/postgresql/data:Z
+
+  jellystat:
+    <<: *svc-defaults
+    container_name: jellystat
+    image: ${JELLYSTAT_IMAGE}
+    environment:
+      POSTGRES_USER: jellystat
+      POSTGRES_PASSWORD: ${JELLYSTAT_PG_PASSWORD}
+      POSTGRES_IP: jellystat-db
+      POSTGRES_PORT: "5432"
+      JWT_SECRET: ${JELLYSTAT_JWT}
+      TZ: ${TZ}
+    ports:
+      - "${BIND_IP}:${JELLYSTAT_PORT}:3000"
+    volumes:
+      - ./jellystat/backup:/app/backend/backup-data:Z
+    depends_on: [jellystat-db]
+
+  # ── Tdarr: транскод библиотеки через NVENC (server + internal node) ──
+  tdarr:
+    <<: *svc-defaults
+    container_name: tdarr
+    image: ${TDARR_IMAGE}
+    runtime: nvidia
+    environment:
+      <<: *common-env
+      serverIP: 0.0.0.0
+      serverPort: "8266"
+      webUIPort: "8265"
+      internalNode: "true"
+      inContainer: "true"
+      nodeName: InternalNode
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    ports:
+      - "${BIND_IP}:${TDARR_WEBUI_PORT}:8265"
+      - "${BIND_IP}:${TDARR_SERVER_PORT}:8266"
+    volumes:
+      - ./tdarr/server:/app/server:Z
+      - ./tdarr/configs:/app/configs:Z
+      - ./tdarr/logs:/app/logs:Z
+      - ${DATA_ROOT}:/data
+      - ${DATA_ROOT}/.tdarr_transcode:/temp
+
+  # ── FlareSolverr: прокси для индексаторов за Cloudflare ──
+  flaresolverr:
+    <<: *svc-defaults
+    container_name: flaresolverr
+    image: ${FLARESOLVERR_IMAGE}
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ}
+
+networks:
+  arr-net:
+    name: arr-net
+    driver: bridge
