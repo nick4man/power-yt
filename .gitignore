@@ -1,0 +1,31 @@
+# ── Секреты и локальная конфигурация ──
+.env
+rclone/*.conf
+!rclone/*.conf.example
+**/secrets/
+
+# ── Runtime-конфиги сервисов (содержимое, структуру оставляем через .gitkeep) ──
+jellyfin/config/
+jellyfin/cache/
+jellyfin/transcode/
+jellyfin/data/
+sonarr/config/
+radarr/config/
+prowlarr/config/
+bazarr/config/
+qbittorrent/config/
+jellyseerr/config/
+
+# ── Прочее ──
+*.log
+*.pid
+*.bak
+.qbit-credentials
+lidarr/config/
+whisparr/config/
+recyclarr/config/
+cleanuparr/config/
+jellystat/
+tdarr/
+auth/data/
+auth/.env
