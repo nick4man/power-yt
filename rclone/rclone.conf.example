@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────
+#  Шаблон rclone.conf. Скопируйте в rclone/rclone.conf и заполните
+#  через `rclone config` (OAuth выполняется интерактивно).
+#  rclone/rclone.conf — в .gitignore (содержит токены).
+# ─────────────────────────────────────────────────────────────
+
+# ── Google Drive ──
+# Создайте СВОИ client_id/secret (console.cloud.google.com), иначе упрётесь
+# в общие лимиты API rclone. Для Shared Drive укажите team_drive.
+[gdrive]
+type = drive
+scope = drive
+# client_id =
+# client_secret =
+# token = {"access_token":...}
+# team_drive =
+
+# ── OneDrive ──
+[onedrive]
+type = onedrive
+# client_id =
+# client_secret =
+# token = {"access_token":...}
+# drive_id =
+# drive_type = personal        # или business / documentLibrary
+
+# ── (опционально) NAS как ещё один remote ──
+# [nas]
+# type = sftp                  # или smb / nfs-mount на хосте
+# host = 192.168.0.12
+# user =
+# key_file =
+
+# ── (опционально) шифрование поверх облака ──
+# [gdrive-crypt]
+# type = crypt
+# remote = gdrive:media
+# password =
+# password2 =
+
+# ── Объединение облаков в единый namespace (его монтирует rclone-cloud.service) ──
+# Новые файлы (от uploader) распределяются по most-free-space.
+[cloud]
+type = union
+upstreams = gdrive:data onedrive:data
+create_policy = mfs
+action_policy = epall
+search_policy = ff

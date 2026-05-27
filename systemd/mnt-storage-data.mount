@@ -1,0 +1,22 @@
+# NFS-маунт ZFS-датасета TrueNAS -> /mnt/storage/data (= общий /data контейнеров).
+# Имя файла ДОЛЖНО соответствовать пути монтирования (mnt-storage-data → /mnt/storage/data).
+# Установка:
+#   sudo cp systemd/mnt-storage-data.mount /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mnt-storage-data.mount
+[Unit]
+Description=NFS mount TrueNAS media dataset -> /mnt/storage/data
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=192.168.0.12:/mnt/media/data
+Where=/mnt/storage/data
+Type=nfs4
+# hard — целостность записи; nconnect — параллельные TCP-сессии для пропускной способности.
+# Не блокирует загрузку: юнит только WantedBy (не Requires) для multi-user.target —
+# если NAS недоступен, цель всё равно достигается, Docker/Nextcloud стартуют.
+Options=_netdev,vers=4.2,rw,hard,noatime,nconnect=4
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target
