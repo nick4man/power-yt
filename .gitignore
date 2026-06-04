@@ -29,3 +29,12 @@ jellystat/
 tdarr/
 auth/data/
 auth/.env
+
+# ── Overlay-фабрика (factory/): runtime, секреты, локальные TURN-credentials ──
+factory/**/.env
+factory/**/data/
+factory/**/secrets/
+factory/ansible/host_vars/*.local.yml
+factory/terraform/*.tfvars
+factory/terraform/.terraform/
+factory/terraform/terraform.tfstate*

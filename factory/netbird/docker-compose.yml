@@ -1,0 +1,92 @@
+# ═════════════════════════════════════════════════════════════════════
+#  NetBird Management Stack — Phase 2 фабрики.
+#  Деплоится на mgmt-eu (зарубежная VPS), управляет membership всех peers.
+#
+#  СВЯЗЬ С Phase 1 (Keycloak factory-admin):
+#    - management.json указывает OIDCConfigEndpoint на
+#      https://login.${FABRIC_DOMAIN}/realms/factory-admin/.well-known/openid-configuration
+#    - Client `netbird` в realm factory-admin реализует PKCE flow (dashboard)
+#      + device-authorization-grant (CLI `netbird up`)
+#
+#  EDGE НА mgmt-eu (Phase 1.5):
+#    Все порты — на 127.0.0.1. Внешний доступ через edge-proxy:
+#      nb.${FABRIC_DOMAIN}              → dashboard:80
+#      nb.${FABRIC_DOMAIN}/api          → management:33080
+#      nb.${FABRIC_DOMAIN}/management   → management:33073 (gRPC, требует http2/h2c)
+#      nb.${FABRIC_DOMAIN}/signalexchange → signal:10000   (gRPC, h2c)
+#    Coturn — host network на UDP/TCP 3478 (STUN/TURN, NAT-traversal).
+#
+#  Запуск:
+#    cp .env.example .env  &&  заполнить FABRIC_DOMAIN, MGMT_PUBLIC_IP, TURN_* секреты
+#    docker compose up -d
+#    docker compose logs management -f      # ждать "Started server: 0.0.0.0:33073"
+# ═════════════════════════════════════════════════════════════════════
+services:
+  dashboard:
+    image: netbirdio/dashboard:latest
+    container_name: nb-dashboard
+    restart: unless-stopped
+    networks: [netbird]
+    environment:
+      NETBIRD_MGMT_API_ENDPOINT: https://nb.${FABRIC_DOMAIN}
+      NETBIRD_MGMT_GRPC_API_ENDPOINT: https://nb.${FABRIC_DOMAIN}
+      AUTH_AUDIENCE: netbird
+      AUTH_CLIENT_ID: netbird
+      AUTH_CLIENT_SECRET: ""
+      AUTH_AUTHORITY: https://login.${FABRIC_DOMAIN}/realms/factory-admin
+      USE_AUTH0: "false"
+      AUTH_SUPPORTED_SCOPES: "openid profile email groups api offline_access"
+      AUTH_REDIRECT_URI: /peers
+      AUTH_SILENT_REDIRECT_URI: /silent-callback
+      NETBIRD_TOKEN_SOURCE: accessToken
+    ports:
+      - "127.0.0.1:8081:80"
+
+  signal:
+    image: netbirdio/signal:latest
+    container_name: nb-signal
+    restart: unless-stopped
+    networks: [netbird]
+    volumes:
+      - signal-data:/var/lib/netbird
+    ports:
+      - "127.0.0.1:10000:10000"
+
+  management:
+    image: netbirdio/management:latest
+    container_name: nb-management
+    restart: unless-stopped
+    depends_on: [signal, dashboard]
+    networks: [netbird]
+    volumes:
+      - ./management.json:/etc/netbird/management.json:ro
+      - mgmt-data:/var/lib/netbird
+    command:
+      - --port=33073
+      - --log-file=console
+      - --log-level=info
+      - --disable-anonymous-metrics=false
+      - --single-account-mode-domain=${FABRIC_DOMAIN}
+      - --dns-domain=netbird.fabric
+      - --config=/etc/netbird/management.json
+    ports:
+      - "127.0.0.1:33073:33073"        # gRPC (peer ↔ management)
+      - "127.0.0.1:33080:33080"        # HTTP REST API + dashboard auth
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: nb-coturn
+    restart: unless-stopped
+    network_mode: host                  # STUN/TURN требует прямого доступа к network stack
+    volumes:
+      - ./turnserver.conf:/etc/turnserver.conf:ro
+    command: ["-c", "/etc/turnserver.conf"]
+
+volumes:
+  signal-data:
+  mgmt-data:
+
+networks:
+  netbird:
+    name: netbird
+    driver: bridge

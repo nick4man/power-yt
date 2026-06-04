@@ -81,27 +81,29 @@
     {
       "clientId": "netbird",
       "name": "NetBird Management",
-      "description": "OIDC IdP для NetBird membership и dashboard-login",
+      "description": "OIDC IdP для NetBird: PKCE flow (dashboard) + device-flow (CLI `netbird up`)",
       "enabled": true,
-      "publicClient": false,
+      "publicClient": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
+      "serviceAccountsEnabled": false,
       "redirectUris": [
-        "https://nb.example.com/peers",
-        "https://nb.example.com/*"
+        "https://nb.example.com/*",
+        "http://localhost:53000"
       ],
-      "webOrigins": ["https://nb.example.com"],
+      "webOrigins": ["https://nb.example.com", "+"],
       "attributes": {
         "post.logout.redirect.uris": "https://nb.example.com/+",
-        "access.token.lifespan": "3600"
+        "access.token.lifespan": "3600",
+        "oauth2.device.authorization.grant.enabled": "true",
+        "oidc.ciba.grant.enabled": "false",
+        "pkce.code.challenge.method": "S256"
       },
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "defaultClientScopes": ["openid", "profile", "email", "roles", "groups"]
     },
     {
       "clientId": "forward-auth-admin",
