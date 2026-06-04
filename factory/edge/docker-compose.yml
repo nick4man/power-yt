@@ -41,8 +41,9 @@ services:
       # Узел за sing-box с hijack-dns + ipv4_only — локальная propagation-проверка
       # ломает TXT-резолюцию (NXDOMAIN). Отключаем её: создаём TXT, ждём delay,
       # отдаём challenge LE — он проверяет TXT из глобального интернета напрямую.
-      - --certificatesresolvers.cloudflare.acme.dnschallenge.disablepropagationcheck=true
-      - --certificatesresolvers.cloudflare.acme.dnschallenge.delaybeforecheck=90s
+      # (Traefik 3.7+ синтаксис: propagation.disableChecks / delayBeforeChecks)
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.propagation.disablechecks=true
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.propagation.delaybeforechecks=90s
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
     environment:
