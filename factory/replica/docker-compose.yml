@@ -1,0 +1,84 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Phase 6 — read-replica на cdn (active-passive HA для Keycloak).
+#
+#  Состав:
+#    pg-standby       — Postgres standby через streaming replication
+#                       (warm — не обслуживает запросы до promote)
+#    keycloak-replica — Keycloak read-only (поднимается ТОЛЬКО после promote)
+#
+#  Failover-процедура (ручная, ~60-90 сек):
+#    1. Cloudflare Load Balancer (factory/dns/) детектирует primary down
+#       (3 failed health-checks через 30s интервал = 90s)
+#    2. cf переключает DNS на cdn pool
+#    3. ОПЕРАТОР запускает:
+#         docker compose -f factory/replica/docker-compose.yml exec pg-standby \
+#           bash -c 'pg_ctl promote -D /var/lib/postgresql/data'
+#         docker compose -f factory/replica/docker-compose.yml \
+#           --profile failover up -d keycloak-replica
+#    4. После восстановления primary — pg_basebackup из cdn обратно
+#       (standby-роли меняются местами).
+#
+#  Запуск (после первоначального pg_basebackup):
+#    cp .env.example .env  &&  заполнить
+#    docker compose up -d pg-standby
+#    docker compose logs pg-standby -f       # ждать "started streaming WAL"
+# ═══════════════════════════════════════════════════════════════════════
+
+services:
+  pg-standby:
+    image: postgres:16-alpine
+    container_name: pg-standby
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak                # на самом деле не используется при standby
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+      POSTGRES_DB: keycloak
+      PG_PRIMARY_HOST: ${PG_PRIMARY_HOST}
+      PG_PRIMARY_PORT: ${PG_PRIMARY_PORT:-5432}
+      PG_REPLICATION_USER: replicator
+      PG_REPLICATION_PASSWORD: ${PG_REPLICATION_PASSWORD}
+    volumes:
+      - pg-standby-data:/var/lib/postgresql/data
+      - ./postgres/postgresql.standby.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/bootstrap-standby.sh:/usr/local/bin/bootstrap-standby.sh:ro
+    # Custom entrypoint: при пустом volume → pg_basebackup, иначе обычный start
+    entrypoint:
+      - /usr/local/bin/bootstrap-standby.sh
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+    ports:
+      - "${BIND_IP:-127.0.0.1}:5432:5432"
+    networks: [replica]
+
+  # Поднимается ТОЛЬКО при failover (профиль failover).
+  # В normal mode pg-standby стримит, keycloak-replica не работает.
+  keycloak-replica:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak-replica
+    restart: unless-stopped
+    profiles: [failover]
+    depends_on: [pg-standby]
+    command: ["start"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://pg-standby:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: ${KC_HOSTNAME_URL}
+      KC_HOSTNAME_STRICT: "false"           # допускаем смену хоста при failover
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${BIND_IP:-0.0.0.0}:8080:8080"
+    networks: [replica]
+
+volumes:
+  pg-standby-data:
+
+networks:
+  replica:
+    name: factory-replica
+    driver: bridge

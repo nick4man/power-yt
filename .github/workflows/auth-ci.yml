@@ -81,7 +81,23 @@ jobs:
           OAUTH2_ALLOWED_GROUPS=${{ secrets.OAUTH2_ALLOWED_GROUPS }}
           COOKIE_DOMAIN=.${{ secrets.FABRIC_DOMAIN }}
           BIND_IP=${{ secrets.THIRD_WG_IP }}
+          PG_REPLICATION_PASSWORD=${{ secrets.PG_REPLICATION_PASSWORD }}
+          STANDBY_NETWORK=${{ secrets.STANDBY_NETWORK }}
           EOF
+
+      - name: Render pg_hba.conf from template (envsubst STANDBY_NETWORK)
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSHP" "$DEST" '
+            set -e
+            cd ~/auth
+            # Postgres data volume init копирует pg_hba.conf только при пустом dir.
+            # Если контейнер уже инициализирован — нужно явно подменить файл и reload.
+            STANDBY_NETWORK="${{ secrets.STANDBY_NETWORK }}" envsubst \
+              < postgres/pg_hba.primary.conf > /tmp/pg_hba.rendered
+            docker cp /tmp/pg_hba.rendered keycloak-db:/var/lib/postgresql/data/pg_hba.conf || true
+            docker exec keycloak-db chown postgres:postgres /var/lib/postgresql/data/pg_hba.conf || true
+            docker exec keycloak-db psql -U keycloak -d postgres -c "SELECT pg_reload_conf();" || true
+            rm /tmp/pg_hba.rendered'
 
       - name: Deploy core profile
         run: |

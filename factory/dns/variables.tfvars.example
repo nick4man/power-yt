@@ -1,0 +1,12 @@
+# Скопировать в variables.tfvars (gitignored) и заполнить.
+
+cf_api_token        = "your-cloudflare-api-token-with-zone-dns-and-lb-edit"
+cf_account_id       = "your-cloudflare-account-id"
+cf_zone_id          = "your-cloudflare-zone-id-for-fabric-domain"
+fabric_domain       = "example.com"
+mgmt_eu_ip          = "192.0.2.10"             # primary mgmt-eu public IP
+cdn_ip              = "192.0.2.20"             # backup cdn public IP
+
+# true  = Cloudflare Load Balancer (~$5/mo, автоматический failover)
+# false = 2x A-record (бесплатно, ручной cutover при отказе)
+use_load_balancer   = true

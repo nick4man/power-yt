@@ -1,0 +1,12 @@
+[Unit]
+Description=Trigger NetBird sqlite sync каждые 5 минут
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Unit=netbird-sync.service
+
+[Install]
+WantedBy=timers.target

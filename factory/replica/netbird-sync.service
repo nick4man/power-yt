@@ -1,0 +1,17 @@
+[Unit]
+Description=NetBird sqlite snapshot sync (mgmt-eu → cdn standby)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Snapshot store.db через rsync. Запускается каждые 5 мин таймером.
+# Альтернатива (когда NetBird переведут на Postgres backend) — отключить юнит.
+ExecStart=/usr/bin/rsync -az --inplace \
+  -e "ssh -o StrictHostKeyChecking=accept-new -i /etc/netbird/sync-key" \
+  mgmt-eu-1.netbird.fabric:/var/lib/docker/volumes/netbird_mgmt-data/_data/store.db \
+  /var/lib/docker/volumes/netbird_mgmt-data-standby/_data/store.db
+SuccessExitStatus=0 24
+
+[Install]
+WantedBy=multi-user.target
