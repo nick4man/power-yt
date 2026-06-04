@@ -1,0 +1,115 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "enable": true,
+        "iconColor": "red",
+        "name": "Alerts",
+        "type": "alert"
+      }
+    ]
+  },
+  "description": "Power-YT Fabric — обзорный dashboard. Расширь через Grafana Hub: #7587 NetBird, #1860 Node Exporter Full, #14801 FRR-EVPN.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"0": {"text": "DOWN"}}, "type": "value"},
+            {"options": {"1": {"text": "UP"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "graphMode": "none", "orientation": "horizontal"},
+      "title": "Peer availability (up == 1)",
+      "targets": [
+        {"expr": "up{job=\"node\"}", "legendFormat": "{{peer}}", "refId": "A"}
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 2,
+      "title": "BGP peer state per peer",
+      "targets": [
+        {"expr": "frr_bgp_peer_state", "legendFormat": "{{peer}} ↔ {{peer_address}}", "refId": "A"}
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 3,
+      "title": "EVPN VNI count per peer",
+      "targets": [
+        {"expr": "count by (peer) (frr_evpn_vni_state)", "legendFormat": "{{peer}}", "refId": "A"}
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 4,
+      "title": "AmneziaWG handshake age (sec)",
+      "targets": [
+        {"expr": "time() - node_wireguard_latest_handshake_seconds", "legendFormat": "{{peer}} → {{public_key}}", "refId": "A"}
+      ],
+      "type": "timeseries",
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 5,
+      "title": "Postgres replication lag",
+      "targets": [
+        {"expr": "pg_replication_lag_seconds", "legendFormat": "{{peer}}", "refId": "A"}
+      ],
+      "type": "timeseries",
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "id": 6,
+      "title": "NetBird connected peers",
+      "targets": [
+        {"expr": "netbird_peer_count{state=\"connected\"}", "legendFormat": "connected", "refId": "A"},
+        {"expr": "netbird_peer_count{state=\"disconnected\"}", "legendFormat": "disconnected", "refId": "B"}
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "id": 7,
+      "title": "Host CPU usage %",
+      "targets": [
+        {"expr": "100 - (avg by (peer) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "{{peer}}", "refId": "A"}
+      ],
+      "type": "timeseries",
+      "fieldConfig": {"defaults": {"unit": "percent", "max": 100, "min": 0}}
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["fabric", "power-yt"],
+  "templating": {"list": []},
+  "time": {"from": "now-3h", "to": "now"},
+  "title": "Power-YT Fabric — Overview",
+  "uid": "fabric-overview",
+  "version": 1,
+  "weekStart": ""
+}

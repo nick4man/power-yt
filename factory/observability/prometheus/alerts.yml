@@ -1,0 +1,148 @@
+groups:
+  # ═══════════════════════════════════════════════════════════════════
+  #  BGP / EVPN
+  # ═══════════════════════════════════════════════════════════════════
+  - name: fabric.bgp
+    interval: 60s
+    rules:
+      - alert: BgpSessionDown
+        expr: frr_bgp_peer_state == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: bgp
+        annotations:
+          summary: 'BGP session DOWN on {{ $labels.peer }} ↔ {{ $labels.peer_address }}'
+          description: 'iBGP session не в Established >5min. EVPN routes не распространяются.'
+
+      - alert: EvpnVniAdvertisingStopped
+        expr: absent_over_time(frr_evpn_vni_state{vni!=""}[10m])
+        for: 10m
+        labels:
+          severity: warning
+          component: evpn
+        annotations:
+          summary: 'EVPN VNI {{ $labels.vni }} перестал анонсироваться на {{ $labels.peer }}'
+
+      - alert: BgpRouteCountSpike
+        expr: rate(frr_bgp_peer_messages_received_total[10m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: bgp
+        annotations:
+          summary: 'BGP flapping на {{ $labels.peer }} — >100 msg/sec за 5min'
+
+  # ═══════════════════════════════════════════════════════════════════
+  #  NetBird membership
+  # ═══════════════════════════════════════════════════════════════════
+  - name: fabric.netbird
+    interval: 60s
+    rules:
+      - alert: NetBirdPeerOffline
+        expr: time() - netbird_peer_last_seen > 1800
+        for: 10m
+        labels:
+          severity: warning
+          component: netbird
+        annotations:
+          summary: 'NetBird peer {{ $labels.peer }} offline > 30min'
+
+      - alert: NetBirdMgmtDown
+        expr: up{job="netbird-mgmt"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: netbird
+        annotations:
+          summary: 'NetBird Management API недоступен > 3min (Phase 6 failover на cdn должен подхватить)'
+
+  # ═══════════════════════════════════════════════════════════════════
+  #  AmneziaWG underlay
+  # ═══════════════════════════════════════════════════════════════════
+  - name: fabric.amneziawg
+    interval: 60s
+    rules:
+      - alert: AmneziaWgHandshakeStale
+        expr: time() - node_wireguard_latest_handshake_seconds > 600
+        for: 5m
+        labels:
+          severity: warning
+          component: amneziawg
+        annotations:
+          summary: 'AmneziaWG handshake stale > 10min на {{ $labels.peer }} (DPI?)'
+
+      - alert: AmneziaWgPacketLoss
+        expr: rate(node_wireguard_tx_packets_total[5m]) > 0 and rate(node_wireguard_rx_packets_total[5m]) / rate(node_wireguard_tx_packets_total[5m]) < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: amneziawg
+        annotations:
+          summary: 'AmneziaWG rx/tx ratio < 80% на {{ $labels.peer }} — возможный packet drop'
+
+  # ═══════════════════════════════════════════════════════════════════
+  #  Postgres replication (Phase 6 HA)
+  # ═══════════════════════════════════════════════════════════════════
+  - name: fabric.replication
+    interval: 60s
+    rules:
+      - alert: PostgresReplicationLag
+        expr: pg_replication_lag_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: 'PG replication lag > 5min на {{ $labels.peer }} (cdn standby отстаёт)'
+
+      - alert: PostgresPrimaryDown
+        expr: up{job="postgres",peer="mgmt-eu-1"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: 'PG primary down — CF DNS-failover на cdn должен сработать'
+
+  # ═══════════════════════════════════════════════════════════════════
+  #  Hosts
+  # ═══════════════════════════════════════════════════════════════════
+  - name: fabric.host
+    interval: 60s
+    rules:
+      - alert: NodeDown
+        expr: up{job="node"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: host
+        annotations:
+          summary: '{{ $labels.peer }} unreachable > 5min'
+
+      - alert: HighMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: '{{ $labels.peer }} memory < 10% available'
+
+      - alert: HighDisk
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.10
+        for: 30m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: '{{ $labels.peer }} / partition < 10% free'
+
+      - alert: HighCpu
+        expr: 100 - (avg by (peer) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 15m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: '{{ $labels.peer }} CPU > 90% за 15min'

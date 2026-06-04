@@ -78,3 +78,8 @@ base_packages:
 # ── EVPN MTU (Phase 4): AmneziaWG=1420 + VXLAN=50B = overlay ≤ 1370 ──
 fabric_overlay_mtu: 1370
 fabric_underlay_mtu: 1420
+
+# ── Phase 8: observability exporters ──
+# Postgres exporter password — генерируется на mgmt-eu/cdn, общий с postgres user
+# postgres-exporter (роль с pg_monitor) — заполняется через ansible-vault.
+pg_exporter_password: ""                        # ansible-vault encrypt_string

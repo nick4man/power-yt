@@ -1,0 +1,9 @@
+---
+- name: daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart frr_exporter
+  ansible.builtin.systemd:
+    name: frr_exporter
+    state: restarted

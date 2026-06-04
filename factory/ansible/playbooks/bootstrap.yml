@@ -58,3 +58,8 @@
         - announced_vnis is defined
         - announced_vnis | length > 0
       tags: [evpn]
+
+    # Phase 8: node_exporter + frr_exporter + postgres_exporter
+    # (последний только на mgmt-eu / cdn — фильтрация в самой роли).
+    - role: observability
+      tags: [observability]
