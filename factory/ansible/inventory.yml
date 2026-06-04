@@ -1,0 +1,97 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Overlay-фабрика — Ansible inventory
+#
+#  Группы:
+#    mgmt       — primary control-plane (mgmt-eu, route-reflector primary)
+#    edges      — публичные edge (cdn-VDS, route-reflector backup)
+#    gateways   — site-gateways с локальным L2-сегментом за ними
+#    members    — узлы-участники фабрики БЕЗ моста к LAN (напр. media-host)
+#    exits      — anti-censorship выходы (динамические, ротируемые)
+#
+#  Все ansible_host=REPLACE_WITH_* — заполнить при провижионинге VPS / VM.
+#  Секреты (netbird_setup_key) — через ansible-vault или CI secrets.
+# ═══════════════════════════════════════════════════════════════════════
+all:
+  children:
+    mgmt:
+      hosts:
+        mgmt-eu-1:
+          ansible_host: REPLACE_WITH_PUBLIC_IP        # Hetzner DE / Vultr NL
+          ansible_user: root
+          fabric_loopback: 10.255.0.1
+          fabric_role: rr-primary
+          announced_vnis: [admin]
+
+    edges:
+      hosts:
+        cdn:
+          ansible_host: REPLACE_WITH_PUBLIC_IP        # Moscow VDS (известный белый IP)
+          ansible_user: root
+          fabric_loopback: 10.255.0.2
+          fabric_role: rr-backup
+          announced_vnis: [media, admin]
+
+    gateways:
+      hosts:
+        office-msk-gw:
+          ansible_host: REPLACE_WITH_LAN_IP           # доступен только из office-LAN или через mgmt-overlay
+          ansible_user: root
+          fabric_loopback: 10.255.0.3
+          fabric_role: site-gw
+          local_lan_iface: ens19
+          local_lan_subnet: 192.168.10.0/24
+          announced_vnis: [office, admin]
+
+        home-rzn-gw:
+          ansible_host: REPLACE_WITH_LAN_IP
+          ansible_user: root
+          fabric_loopback: 10.255.0.4
+          fabric_role: site-gw
+          local_lan_iface: ens19
+          local_lan_subnet: 192.168.0.0/24
+          announced_vnis: [home, admin]
+
+        iot-gw:
+          ansible_host: REPLACE_WITH_LAN_IP
+          ansible_user: root
+          fabric_loopback: 10.255.0.5
+          fabric_role: site-gw
+          local_lan_iface: ens19
+          local_lan_subnet: 192.168.50.0/24            # уточнить при провижионинге IoT-VLAN
+          announced_vnis: [iot, admin]
+
+    members:
+      hosts:
+        media-host:
+          ansible_host: 192.168.0.145                  # рязанский home-сегмент, уже существующий
+          ansible_user: q
+          ansible_become: true
+          fabric_loopback: 10.255.0.6
+          fabric_role: member
+          announced_vnis: [media, admin]
+
+    exits:
+      hosts:
+        exit-de:
+          ansible_host: REPLACE_WITH_PUBLIC_IP         # Hetzner Falkenstein
+          ansible_user: root
+          fabric_loopback: 10.255.0.10
+          fabric_role: exit
+          bgp_local_pref: 200                          # primary exit
+          announced_vnis: [admin]
+
+        exit-nl:
+          ansible_host: REPLACE_WITH_PUBLIC_IP         # Vultr Amsterdam
+          ansible_user: root
+          fabric_loopback: 10.255.0.11
+          fabric_role: exit
+          bgp_local_pref: 150
+          announced_vnis: [admin]
+
+        exit-jp:
+          ansible_host: REPLACE_WITH_PUBLIC_IP         # Linode Tokyo (опц.)
+          ansible_user: root
+          fabric_loopback: 10.255.0.12
+          fabric_role: exit
+          bgp_local_pref: 100
+          announced_vnis: [admin]

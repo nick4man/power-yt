@@ -1,0 +1,107 @@
+---
+# Site-gateway / route-reflector / member: NetBird client + FRR (BGP/EVPN-ready).
+# Применяется при fabric_role in [site-gw, rr-primary, rr-backup, member].
+#
+# Role evpn (Phase 4) добавляется отдельным шагом — здесь только основа:
+# NetBird для membership и FRR установлен/настроен на iBGP с RR-cluster
+# (но VXLAN-интерфейсы и l2vpn-evpn AF — в Phase 4).
+
+# ── 1. NetBird client (membership) ──────────────────────────────────────
+
+- name: Add NetBird repo signing key (Debian/Ubuntu)
+  ansible.builtin.get_url:
+    url: https://pkgs.netbird.io/debian/public.key
+    dest: /usr/share/keyrings/netbird-archive-keyring.asc
+    mode: '0644'
+  when: ansible_os_family == 'Debian'
+
+- name: Add NetBird apt source
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/netbird.list
+    content: "deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.asc] https://pkgs.netbird.io/debian stable main\n"
+    mode: '0644'
+  when: ansible_os_family == 'Debian'
+  notify: apt update
+
+- name: Install NetBird + FRR (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name:
+      - netbird
+      - frr
+      - frr-pythontools
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+
+- name: Install NetBird + FRR (Fedora — netbird tarball, frr из repo)
+  block:
+    - name: Install FRR via dnf
+      ansible.builtin.dnf:
+        name: [frr, frr-pythontools]
+        state: present
+    - name: Note — NetBird Fedora install
+      ansible.builtin.debug:
+        msg: |
+          На Fedora ставь NetBird вручную:
+            curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          (или COPR-репо). Эта роль покрывает только Debian/Ubuntu.
+  when: ansible_os_family in ['RedHat', 'Fedora']
+
+# ── 2. FRR daemons (включаем bgpd) ──────────────────────────────────────
+
+- name: Enable bgpd in /etc/frr/daemons
+  ansible.builtin.lineinfile:
+    path: /etc/frr/daemons
+    regexp: '^bgpd='
+    line: 'bgpd=yes'
+    backup: true
+  notify: restart frr
+
+- name: Ensure zebra + staticd enabled in /etc/frr/daemons
+  ansible.builtin.lineinfile:
+    path: /etc/frr/daemons
+    regexp: "^{{ item }}="
+    line: "{{ item }}=yes"
+  loop:
+    - zebra
+    - staticd
+  notify: restart frr
+
+# ── 3. FRR конфиг (Phase 4 evpn-role перезапишет с VXLAN; пока — заглушка iBGP) ──
+
+- name: Deploy minimal frr.conf (iBGP без EVPN — Phase 4 расширит)
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../frr/templates/frr.conf.j2"
+    dest: /etc/frr/frr.conf
+    owner: frr
+    group: frr
+    mode: '0640'
+    backup: true
+  notify: restart frr
+
+- name: Start + enable FRR
+  ansible.builtin.service:
+    name: frr
+    state: started
+    enabled: true
+
+# ── 4. NetBird daemon (отдельный шаг от настройки — поднимаем демон, далее `netbird up`) ─
+
+- name: Start + enable NetBird daemon
+  ansible.builtin.service:
+    name: netbird
+    state: started
+    enabled: true
+  when: ansible_os_family == 'Debian'
+
+- name: Connect to NetBird (one-shot — требует netbird_setup_key)
+  ansible.builtin.command:
+    cmd: >
+      netbird up
+      --setup-key {{ netbird_setup_key }}
+      --management-url {{ netbird_mgmt_url }}
+  when:
+    - netbird_setup_key | length > 0
+    - ansible_os_family == 'Debian'
+  changed_when: false
+  no_log: true

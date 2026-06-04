@@ -1,0 +1,51 @@
+---
+# ═══════════════════════════════════════════════════════════════════════
+#  Полный bootstrap нового peer'а фабрики.
+#
+#  Usage:
+#    # Один peer:
+#    ansible-playbook playbooks/bootstrap.yml --limit office-msk-gw
+#
+#    # Группа:
+#    ansible-playbook playbooks/bootstrap.yml --limit gateways
+#
+#    # С vault для setup-key:
+#    ansible-playbook playbooks/bootstrap.yml --limit exit-de \
+#      --ask-vault-pass --extra-vars '@vault/netbird-keys.yml'
+#
+#  Шаги:
+#    1. base       — sysctl forwarding, NTP, hostname, базовые пакеты
+#    2. gw / exit  — role-specific (NetBird + FRR + bridges; либо NAT для exit)
+#
+#  FRR-конфиг и VXLAN-интерфейсы (Phase 4) подключаются через role evpn,
+#  которая будет добавлена в эту цепочку позже.
+# ═══════════════════════════════════════════════════════════════════════
+- name: Bootstrap fabric peer (base + role)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify fabric_role is set
+      ansible.builtin.assert:
+        that: fabric_role is defined
+        fail_msg: "fabric_role не задан в host_vars/inventory для {{ inventory_hostname }}"
+
+    - name: Verify fabric_loopback is set
+      ansible.builtin.assert:
+        that:
+          - fabric_loopback is defined
+          - fabric_loopback | ansible.utils.ipv4
+        fail_msg: "fabric_loopback должен быть валидным IPv4 для {{ inventory_hostname }}"
+
+  roles:
+    - role: base
+      tags: [base]
+
+    - role: gw
+      when: fabric_role in ['site-gw', 'rr-primary', 'rr-backup', 'member']
+      tags: [gw]
+
+    - role: exit
+      when: fabric_role == 'exit'
+      tags: [exit]

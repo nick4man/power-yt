@@ -1,0 +1,80 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Фабрика-wide константы. Применяются ко всем peers.
+#  Per-host разница (loopback, роль, локальная LAN) — в host_vars/* и inventory.
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Базовая идентичность фабрики ──
+fabric_as: 65000                                # private AS для iBGP
+fabric_dns_domain: netbird.fabric               # MagicDNS suffix (NetBird автоген)
+fabric_underlay_subnet: 10.255.0.0/24           # пул loopback-адресов
+fabric_awg_mesh_subnet: 10.254.0.0/16           # AmneziaWG /30 point-to-point links
+
+# ── AmneziaWG obfuscation (одинаковые на всех peers!) ──
+# Эти параметры — секретные для DPI. После генерации не менять без причины
+# (смена обнуляет все туннели одномоментно). При срабатывании DPI на текущие
+# параметры — перегенерировать ВСЕ + ansible-playbook --tags awg.
+awg_jc: 7
+awg_jmin: 50
+awg_jmax: 1000
+awg_s1: 86
+awg_s2: 574
+awg_h1: 1
+awg_h2: 2
+awg_h3: 3
+awg_h4: 4
+
+# ── iBGP Route-Reflectors (Phase 4 EVPN cluster) ──
+# Каждый site-gw поднимает peering к ОБОИМ RR — failover автоматический.
+rr_peers:
+  - { name: mgmt-eu-1, loopback: 10.255.0.1, role: primary }
+  - { name: cdn,       loopback: 10.255.0.2, role: backup  }
+
+# ── VNI map (overlay segments) ──
+# vni     — VXLAN Network Identifier (24-битное число), уникально на фабрику
+# subnet  — overlay-подсеть, в которую узлы получают IP внутри VNI
+# bridge  — имя linux bridge, к которому VNI прикреплён (на site-gw)
+fabric_vnis:
+  office:
+    vni: 10100
+    overlay_subnet: 10.10.0.0/24
+    bridge: br-office
+  home:
+    vni: 10200
+    overlay_subnet: 10.20.0.0/24
+    bridge: br-home
+  iot:
+    vni: 10300
+    overlay_subnet: 10.30.0.0/24
+    bridge: br-iot
+  media:
+    vni: 10400
+    overlay_subnet: 10.40.0.0/24
+    bridge: br-media
+  admin:
+    vni: 10500
+    overlay_subnet: 10.50.0.0/24
+    bridge: br-admin
+
+# ── Phase 1: Keycloak (mgmt-eu) ──
+keycloak_realm_admin: factory-admin
+keycloak_realm_family: family
+keycloak_url: https://login.example.com         # переопределяется через extra-vars / vault
+
+# ── Phase 2: NetBird (mgmt-eu) ──
+netbird_mgmt_url: https://nb.example.com
+netbird_setup_key: ""                           # ansible-vault encrypt_string или CI secret
+
+# ── Базовые пакеты — на всех узлах фабрики ──
+base_packages:
+  - curl
+  - jq
+  - chrony
+  - vim
+  - htop
+  - tcpdump
+  - bind9-dnsutils
+  - net-tools
+
+# ── EVPN MTU (Phase 4): AmneziaWG=1420 + VXLAN=50B = overlay ≤ 1370 ──
+fabric_overlay_mtu: 1370
+fabric_underlay_mtu: 1420

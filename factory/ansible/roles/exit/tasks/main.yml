@@ -1,0 +1,53 @@
+---
+# Exit-узел (zarubezhnaya VPS с публичным IP).
+# Дополняет роль gw для fabric_role=exit:
+#   - NAT44 masquerade для исходящего user-трафика
+#   - анонс default-route в iBGP (приоритет — bgp_local_pref в host_vars)
+#
+# Phase 3 минимум: skeleton. Phase 5 (Exit-фабрика) расширит:
+#   - nftables rate-limiting per peer
+#   - GeoIP-блокировка опц.
+#   - cloudflared/wireguard signal-fallback при DPI на UDP
+
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+
+- name: Drop NAT44 baseline ruleset
+  ansible.builtin.copy:
+    dest: /etc/nftables.conf
+    mode: '0644'
+    content: |
+      #!/usr/sbin/nft -f
+      flush ruleset
+
+      table inet filter {
+        chain input    { type filter hook input    priority 0; policy accept; }
+        chain forward  { type filter hook forward  priority 0; policy accept; }
+        chain output   { type filter hook output   priority 0; policy accept; }
+      }
+
+      table ip nat {
+        chain prerouting  { type nat hook prerouting  priority -100; }
+        chain postrouting { type nat hook postrouting priority 100;
+          # MASQUERADE для трафика из фабрики (10.X.X.X) на внешний интерфейс
+          ip saddr 10.0.0.0/8 oifname != "wt0" oifname != "lo" masquerade
+        }
+      }
+  notify: restart nftables
+
+- name: Enable + start nftables
+  ansible.builtin.service:
+    name: nftables
+    enabled: true
+    state: started
+
+- name: Note — bgp_local_pref applied via role evpn template
+  ansible.builtin.debug:
+    msg: |
+      Exit-узел готов: NAT44 включён, bgp_local_pref={{ bgp_local_pref | default('unset') }}.
+      Анонс default-route 0.0.0.0/0 — через role gw / frr.conf.j2 (network 0.0.0.0/0).
+      Phase 5 добавит rate-limiting и GeoIP-фильтр опционально.

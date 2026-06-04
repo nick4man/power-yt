@@ -1,0 +1,81 @@
+! ═══════════════════════════════════════════════════════════════════════
+!  FRRouting конфиг для peer'а фабрики (Phase 3 минимум — Phase 4 расширит EVPN).
+!  Генерируется Ansible-template из inventory + group_vars/all.yml.
+!  Правки руками будут стёрты следующим прогоном playbook'а.
+!
+!  Что есть сейчас (Phase 3):
+!    - iBGP к Route-Reflectors (rr_peers из group_vars/all.yml)
+!    - AS=fabric_as (private 65000)
+!    - update-source=loopback (fabric_loopback)
+!
+!  Что добавит Phase 4 (role evpn):
+!    - address-family l2vpn evpn + advertise-all-vni
+!    - vxlan-* интерфейсы через systemd-networkd
+!    - linux bridges с членством в VXLAN VTEP
+! ═══════════════════════════════════════════════════════════════════════
+frr version 8.4
+frr defaults traditional
+hostname {{ inventory_hostname }}
+no ipv6 forwarding
+log syslog informational
+service integrated-vtysh-config
+!
+{% if fabric_role in ['rr-primary', 'rr-backup'] %}
+! ─── Этот узел — Route-Reflector ────────────────────────────────────────
+router bgp {{ fabric_as }}
+ bgp router-id {{ fabric_loopback }}
+ bgp cluster-id {{ fabric_loopback }}
+ no bgp default ipv4-unicast
+ no bgp ebgp-requires-policy
+{% for h in groups['all'] | reject('match', inventory_hostname) %}
+{% if hostvars[h].fabric_loopback is defined %}
+ neighbor {{ hostvars[h].fabric_loopback }} remote-as {{ fabric_as }}
+ neighbor {{ hostvars[h].fabric_loopback }} update-source lo
+ neighbor {{ hostvars[h].fabric_loopback }} description {{ h }}
+{% endif %}
+{% endfor %}
+ !
+ address-family ipv4 unicast
+{% for h in groups['all'] | reject('match', inventory_hostname) %}
+{% if hostvars[h].fabric_loopback is defined %}
+  neighbor {{ hostvars[h].fabric_loopback }} activate
+  neighbor {{ hostvars[h].fabric_loopback }} route-reflector-client
+{% endif %}
+{% endfor %}
+  network {{ fabric_loopback }}/32
+ exit-address-family
+ !
+ ! Phase 4: add address-family l2vpn evpn here (advertise-all-vni)
+exit
+{% else %}
+! ─── Этот узел — site-gw / exit / member (НЕ route-reflector) ──────────
+router bgp {{ fabric_as }}
+ bgp router-id {{ fabric_loopback }}
+ no bgp default ipv4-unicast
+ no bgp ebgp-requires-policy
+{% for rr in rr_peers %}
+ neighbor {{ rr.loopback }} remote-as {{ fabric_as }}
+ neighbor {{ rr.loopback }} update-source lo
+ neighbor {{ rr.loopback }} description {{ rr.name }}-{{ rr.role }}
+{% endfor %}
+ !
+ address-family ipv4 unicast
+{% for rr in rr_peers %}
+  neighbor {{ rr.loopback }} activate
+{% endfor %}
+  network {{ fabric_loopback }}/32
+{% if local_lan_subnet is defined %}
+  network {{ local_lan_subnet }}                      ! site-LAN, анонсируется в фабрику
+{% endif %}
+{% if fabric_role == 'exit' %}
+  network 0.0.0.0/0                                   ! default-route, anti-censorship exit
+{% endif %}
+ exit-address-family
+ !
+ ! Phase 4: add address-family l2vpn evpn here
+exit
+{% endif %}
+!
+line vty
+!
+end
