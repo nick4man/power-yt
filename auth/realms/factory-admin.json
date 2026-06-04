@@ -135,8 +135,7 @@
       "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
       "redirectUris": [
-        "https://proxmox-msk.example.com/",
-        "https://proxmox-msk.example.com/#*"
+        "https://proxmox-msk.example.com/"
       ],
       "webOrigins": ["https://proxmox-msk.example.com"],
       "protocol": "openid-connect",
@@ -151,8 +150,7 @@
       "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
       "redirectUris": [
-        "https://proxmox-rzn.example.com/",
-        "https://proxmox-rzn.example.com/#*"
+        "https://proxmox-rzn.example.com/"
       ],
       "webOrigins": ["https://proxmox-rzn.example.com"],
       "protocol": "openid-connect",

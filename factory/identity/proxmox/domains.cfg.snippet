@@ -39,7 +39,8 @@ openid: keycloak-factory-admin
 #         comment Factory-admin OIDC (Рязань)
 
 # Redirect URIs (уже в realm-export auth/realms/factory-admin.json):
-#   proxmox-msk: https://proxmox-msk.example.com/, https://proxmox-msk.example.com/#*
-#   proxmox-rzn: https://proxmox-rzn.example.com/, https://proxmox-rzn.example.com/#*
+#   proxmox-msk: https://proxmox-msk.example.com/
+#   proxmox-rzn: https://proxmox-rzn.example.com/
+# (БЕЗ фрагмента #* — Keycloak prod-mode отвергает redirect URI с # по OAuth2-спеке)
 # Группы → роли Proxmox: маппинг через autocreate + ручной pveum acl modify
 # (Proxmox не маппит OIDC-groups автоматически в роли — нужен скрипт).
