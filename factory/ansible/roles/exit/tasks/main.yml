@@ -45,9 +45,45 @@
     enabled: true
     state: started
 
-- name: Note — bgp_local_pref applied via role evpn template
+- name: Apply BBR + high-throughput sysctls (anti-censorship exits ~ high RTT)
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/10-fabric-exit.conf
+    reload: true
+  loop:
+    - { name: net.ipv4.tcp_congestion_control, value: bbr }
+    - { name: net.core.default_qdisc,          value: fq }
+    - { name: net.core.somaxconn,              value: '4096' }
+    - { name: net.ipv4.tcp_max_syn_backlog,    value: '4096' }
+    - { name: net.ipv4.tcp_fastopen,           value: '3' }
+  loop_control:
+    label: "{{ item.name }} = {{ item.value }}"
+
+- name: Add bgp_local_pref outbound route-map (FRR) — анонс default с приоритетом
+  ansible.builtin.copy:
+    dest: /etc/frr/exit-localpref.conf
+    mode: '0640'
+    owner: frr
+    group: frr
+    content: |
+      ! Управляется Ansible. local-pref на анонсе default-route.
+      route-map EXIT-OUT permit 10
+       set local-preference {{ bgp_local_pref }}
+      !
+      ! Включить в frr.conf:
+      !   router bgp {{ fabric_as }}
+      !    address-family ipv4 unicast
+      !     neighbor <RR> route-map EXIT-OUT out
+  notify: restart frr
+
+- name: Финальный отчёт
   ansible.builtin.debug:
     msg: |
-      Exit-узел готов: NAT44 включён, bgp_local_pref={{ bgp_local_pref | default('unset') }}.
-      Анонс default-route 0.0.0.0/0 — через role gw / frr.conf.j2 (network 0.0.0.0/0).
-      Phase 5 добавит rate-limiting и GeoIP-фильтр опционально.
+      ✓ Exit-узел готов:
+        - NAT44 для 10.0.0.0/8 → внешний iface
+        - BBR + fq qdisc
+        - bgp_local_pref = {{ bgp_local_pref | default('unset') }}
+        - Default-route 0.0.0.0/0 анонсируется через FRR (network statement)
+      Phase 5 добавит rate-limiting + GeoIP-фильтр при необходимости.

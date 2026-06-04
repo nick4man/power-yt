@@ -1,0 +1,14 @@
+# Скопировать в variables.tfvars (gitignored) и заполнить.
+# terraform apply -var-file=variables.tfvars
+
+hcloud_token       = "your-hetzner-cloud-api-token"
+vultr_api_key      = "your-vultr-api-key"
+linode_token       = "your-linode-personal-access-token"
+
+ssh_key_name       = "fabric-deploy"           # имя ssh-key, предзагруженного в каждый провайдер
+netbird_setup_key  = "nb-setupkey-xxxxxxxx"    # сгенерируй в NetBird UI: Setup Keys → New
+netbird_mgmt_url   = "https://nb.example.com"
+
+exit_de_enabled    = true
+exit_nl_enabled    = true
+exit_jp_enabled    = false                     # включи когда нужен Asia-Pacific exit

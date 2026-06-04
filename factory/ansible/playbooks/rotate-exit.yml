@@ -1,0 +1,69 @@
+---
+# ═══════════════════════════════════════════════════════════════════════
+#  Ввод и вывод exit-узла без простоя фабрики.
+#
+#  Сценарий «новый exit заменяет старый»:
+#    1. Создать VPS Terraform'ом, добавить в inventory.
+#    2. ansible-playbook rotate-exit.yml -e action=add -e target=exit-fr
+#    3. Дождаться, пока EVPN-сессия установлена и default-route виден.
+#    4. ansible-playbook rotate-exit.yml -e action=drain -e target=exit-de
+#    5. Удалить старую VPS через Terraform.
+#
+#  Это playbook — обёртка вокруг bootstrap.yml + ручные шаги BGP withdraw.
+# ═══════════════════════════════════════════════════════════════════════
+
+- name: Validate inputs
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - assert:
+        that:
+          - action in ['add', 'drain']
+          - target is defined
+        fail_msg: |
+          Запускай как:
+            ansible-playbook rotate-exit.yml -e action=add   -e target=exit-fr
+            ansible-playbook rotate-exit.yml -e action=drain -e target=exit-de
+
+- name: Add new exit (full bootstrap)
+  import_playbook: bootstrap.yml
+  when: action == 'add'
+  vars:
+    ansible_limit: "{{ target }}"
+
+- name: Drain exit (lower local-pref → BGP withdraw → stop)
+  hosts: "{{ target }}"
+  become: true
+  when: action == 'drain'
+  tasks:
+    - name: Снизить bgp_local_pref до 1 (фактический withdraw — другие exits заберут трафик)
+      ansible.builtin.lineinfile:
+        path: /etc/frr/exit-localpref.conf
+        regexp: '^ set local-preference'
+        line: ' set local-preference 1'
+      notify: restart frr
+
+    - meta: flush_handlers
+
+    - name: Дать времени RR перепосчитать best-path
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: Остановить NetBird (отключает peer от фабрики)
+      ansible.builtin.service:
+        name: netbird
+        state: stopped
+        enabled: false
+
+    - name: Финал — exit готов к удалению через Terraform destroy
+      ansible.builtin.debug:
+        msg: |
+          ✓ {{ target }} drained. Следующий шаг:
+            terraform destroy -target=<provider>_<resource>.{{ target }}
+          После — удалить запись из factory/ansible/inventory.yml.
+
+  handlers:
+    - name: restart frr
+      ansible.builtin.service:
+        name: frr
+        state: restarted
