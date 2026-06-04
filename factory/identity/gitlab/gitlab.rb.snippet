@@ -1,0 +1,46 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  GitLab Omniauth OpenID Connect — Keycloak realm factory-admin.
+#
+#  Добавить в /etc/gitlab/gitlab.rb (omnibus install) или GitLab Helm values.
+#  Применить:
+#    sudo gitlab-ctl reconfigure
+#  Проверить:
+#    sudo gitlab-rake gitlab:check
+# ═══════════════════════════════════════════════════════════════════════
+
+gitlab_rails['omniauth_enabled'] = true
+gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+gitlab_rails['omniauth_block_auto_created_users'] = false
+gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
+gitlab_rails['omniauth_external_providers'] = []          # пусто = все providers internal (имеют доступ)
+
+# При желании — единственный способ логина (отключить локальные пароли):
+# gitlab_rails['omniauth_auto_sign_in_with_provider'] = 'openid_connect'
+
+gitlab_rails['omniauth_providers'] = [
+  {
+    name: "openid_connect",
+    label: "Factory SSO",
+    icon: "https://login.example.com/resources/keycloak-icon.svg",
+    args: {
+      name: "openid_connect",
+      scope: ["openid", "profile", "email", "groups"],
+      response_type: "code",
+      issuer: "https://login.example.com/realms/factory-admin",
+      discovery: true,
+      client_auth_method: "query",
+      uid_field: "preferred_username",
+      send_scope_to_token_endpoint: true,
+      pkce: true,
+      client_options: {
+        identifier: "gitlab",
+        secret: "REPLACE_WITH_CLIENT_SECRET_FROM_KC",
+        redirect_uri: "https://gitlab.example.com/users/auth/openid_connect/callback"
+      }
+    }
+  }
+]
+
+# Маппинг групп → роли GitLab делается через SAML/SCIM или вручную (admin → группы).
+# OpenID Connect omniauth НЕ создаёт автоматический group-membership — но можно через
+# post-receive хук + GitLab API.

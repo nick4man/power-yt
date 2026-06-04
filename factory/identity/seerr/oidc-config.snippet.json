@@ -1,0 +1,19 @@
+{
+  "_comment": "Jellyseerr OIDC config. Применяется через UI: Settings → Users → Enable OpenID Connect. Этот JSON — справка для значений (Seerr пишет состояние в config/settings.json своим форматом, не overrides).",
+
+  "_install_steps": [
+    "1. Settings → Users → Local Sign-In: оставить включённым (на случай OIDC fail)",
+    "2. Settings → Users → Enable OpenID Connect: ON",
+    "3. Подставить параметры ниже",
+    "4. Settings → Notifications → Webhooks: добавить hook на logon-failure для алёрта"
+  ],
+
+  "OIDCProvider": "Keycloak family",
+  "ClientId": "seerr",
+  "ClientSecret": "REPLACE_WITH_CLIENT_SECRET_FROM_KC",
+  "DiscoveryURL": "https://login.example.com/realms/family/.well-known/openid-configuration",
+  "RedirectURL": "https://seerr.example.com/login/oidc/callback",
+  "Scope": "openid profile email groups",
+  "AutomaticUserCreation": true,
+  "RequiredGroups": ["family-members", "family-guests"]
+}

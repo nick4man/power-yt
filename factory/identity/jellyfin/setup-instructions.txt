@@ -1,0 +1,29 @@
+Jellyfin OIDC через SSO-Auth plugin (9p4/jellyfin-plugin-sso)
+═════════════════════════════════════════════════════════════════════
+
+1. Plugin install:
+   Dashboard → Plugins → Repositories → Add:
+     URL:  https://raw.githubusercontent.com/9p4/jellyfin-plugin-sso/manifest-release/manifest.json
+     Name: SSO Auth
+   Затем Catalog → Authentication → SSO-Auth → Install → перезагрузить Jellyfin.
+
+2. Config (после restart):
+   Dashboard → Plugins → SSO-Auth → Settings
+   Создать новый OID provider с параметрами из sso-plugin.json.snippet:
+     Name:          keycloak-family
+     OID Endpoint:  https://login.example.com/realms/family
+     Client ID:     jellyfin
+     Client Secret: <из KC realm family → client jellyfin → Credentials>
+     Enable Auth:   yes
+     Roles:         user
+     Role Claim:    groups
+
+3. На странице логина Jellyfin появится "Sign in with keycloak-family".
+   При первом OIDC-логине создастся новый Jellyfin-user с username из claim
+   `preferred_username`. Связать с существующим аккаунтом — нельзя автоматически.
+
+4. Tighten: после успешной интеграции отключить классический логин:
+   Dashboard → User → каждому user → Authentication Provider: SSO
+
+Redirect URI (в realm-export уже задано):
+   https://jellyfin.example.com/sso/OID/redirect/keycloak-family

@@ -1,0 +1,44 @@
+; ═══════════════════════════════════════════════════════════════════════
+;  Grafana Generic OAuth → Keycloak realm factory-admin
+;
+;  Добавить в /etc/grafana/grafana.ini (override-секции; остальные значения
+;  по умолчанию). После — sudo systemctl restart grafana-server.
+;
+;  Phase 8: после observability stack — Grafana поднимается с этим preset'ом.
+; ═══════════════════════════════════════════════════════════════════════
+
+[server]
+root_url = https://grafana.example.com
+domain = grafana.example.com
+
+[auth]
+disable_login_form = false                ; локальный логин остаётся как fallback
+oauth_auto_login = false
+signout_redirect_url = https://login.example.com/realms/factory-admin/protocol/openid-connect/logout?redirect_uri=https%3A%2F%2Fgrafana.example.com
+
+[auth.generic_oauth]
+enabled = true
+name = Factory SSO
+icon = signin
+allow_sign_up = true
+client_id = grafana
+client_secret = REPLACE_WITH_CLIENT_SECRET_FROM_KC
+scopes = openid profile email groups
+empty_scopes = false
+auth_url = https://login.example.com/realms/factory-admin/protocol/openid-connect/auth
+token_url = https://login.example.com/realms/factory-admin/protocol/openid-connect/token
+api_url = https://login.example.com/realms/factory-admin/protocol/openid-connect/userinfo
+use_pkce = true
+
+; Маппинг claim'ов на поля Grafana user
+login_attribute_path = preferred_username
+name_attribute_path = name
+email_attribute_path = email
+groups_attribute_path = groups
+
+; Role-mapping: netadmins → Admin, остальные → Viewer
+role_attribute_path = contains(groups[*], 'netadmins') && 'GrafanaAdmin' || contains(groups[*], 'office-staff') && 'Editor' || 'Viewer'
+allow_assign_grafana_admin = true
+
+; Только эти группы пускаем в Grafana
+allowed_groups = netadmins office-staff home-power-users

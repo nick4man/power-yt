@@ -1,0 +1,44 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Traefik forward-auth — на cdn (VDS).
+#  Заменяет media-basic-auth (basic-auth@file) на media-forward-auth для
+#  admin-роутеров: sonarr, radarr, prowlarr, bazarr, qbit, cleanuparr,
+#  jellystat, tdarr.
+#
+#  Public-роутеры (jellyfin, seerr) НЕ трогаем — у них собственный OIDC.
+#
+#  Установка (на cdn):
+#    1. Бэкап /etc/traefik/dynamic.yml.
+#    2. Слить этот snippet с существующим dynamic.yml — merge http.services,
+#       http.middlewares, и заменить middlewares в admin-роутерах:
+#         routers.media-sonarr.middlewares: [..., media-forward-auth]
+#       (вместо basic-auth@file)
+#    3. Traefik автоматически перечитает (watch=true).
+#    4. curl -I https://media.example.com/sonarr → 302 на login.example.com
+#
+#  После Phase 6 (HA) — изменить url loadBalancer на CF Load Balancer:
+#    http://login.example.com/oauth2/auth (через CF LB DNS-failover)
+# ═══════════════════════════════════════════════════════════════════════
+
+http:
+  services:
+    # oauth2-proxy — на primary mgmt-eu через NetBird overlay (MagicDNS)
+    oauth2-proxy:
+      loadBalancer:
+        servers:
+          - url: "http://mgmt-eu-1.netbird.fabric:4180"
+          # После Phase 6 CF Load Balancer:
+          # - url: "https://login.example.com"   # CF DNS-failover автоматически выберет primary/backup
+        passHostHeader: true
+
+  middlewares:
+    media-forward-auth:
+      forwardAuth:
+        address: "http://mgmt-eu-1.netbird.fabric:4180/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-Email
+          - X-Auth-Request-User
+          - X-Auth-Request-Preferred-Username
+          - X-Auth-Request-Groups
+        # При невалидном/просроченном токене — редиректим на oauth2-proxy /oauth2/start
+        # (oauth2-proxy сам редиректит на Keycloak)

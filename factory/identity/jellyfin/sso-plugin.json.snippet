@@ -1,0 +1,34 @@
+{
+  "_comment": "Jellyfin SSO-Auth plugin (9p4/jellyfin-plugin-sso) config. Положить в /config/plugins/configurations/SSO-Auth.xml.json или импортировать через GUI: Dashboard → Plugins → SSO-Auth → Settings.",
+  "_install": [
+    "1. Установить плагин: Jellyfin Dashboard → Plugins → Catalog → SSO-Auth",
+    "2. Restart Jellyfin",
+    "3. Импортировать этот конфиг через UI или скопировать в /config/plugins/configurations/SSO-Auth.xml",
+    "4. Подставить OidSecret из Keycloak realm family → client jellyfin → Credentials"
+  ],
+  "OidConfigs": {
+    "keycloak-family": {
+      "OidEndpoint": "https://login.example.com/realms/family",
+      "OidClientId": "jellyfin",
+      "OidSecret": "REPLACE_WITH_CLIENT_SECRET_FROM_KC",
+      "Enabled": true,
+      "EnableAuthorization": true,
+      "EnableAllFolders": true,
+      "EnabledFolders": [],
+      "AdminRoles": ["jellyfin-admin"],
+      "Roles": ["user"],
+      "EnableFolderRoles": false,
+      "FolderRoleMapping": [],
+      "RoleClaim": "groups",
+      "OidScopes": ["openid", "profile", "email", "groups"],
+      "CanonicalLinks": [],
+      "DefaultProvider": "Jellyfin",
+      "DisableHttps": false,
+      "DoNotValidateEndpoints": false,
+      "DoNotValidateIssuerName": false,
+      "NewUserLogin": true,
+      "SchemeOverride": ""
+    }
+  },
+  "SamlConfigs": []
+}

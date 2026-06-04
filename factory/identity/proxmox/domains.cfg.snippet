@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Proxmox OIDC realm — добавляется в /etc/pve/domains.cfg.
+#  Применить на КАЖДОМ Proxmox-host'е (Москва + Рязань).
+#
+#  Установка (от root на Proxmox):
+#    1. Бэкап:           cp /etc/pve/domains.cfg{,.bak.$(date +%F)}
+#    2. Вставить этот блок в конец /etc/pve/domains.cfg.
+#    3. Подставить:
+#         issuer-url     → https://login.<FABRIC_DOMAIN>/realms/factory-admin
+#         client-key     → из Keycloak: realm factory-admin →
+#                          client proxmox-msk → Credentials
+#    4. Создать пользователя руками или autocreate=1 при первом логине:
+#         pveum user add q@keycloak-factory-admin --comment "OIDC sync"
+#         pveum acl modify / -user q@keycloak-factory-admin -role Administrator
+#    5. Проверить: открыть GUI → realm dropdown появится «keycloak-factory-admin»
+#
+#  Один файл — два блока (по одному на каждый Proxmox; client-id разный).
+# ═══════════════════════════════════════════════════════════════════════
+
+openid: keycloak-factory-admin
+        issuer-url https://login.example.com/realms/factory-admin
+        client-id proxmox-msk
+        client-key REPLACE_WITH_CLIENT_SECRET_FROM_KC
+        username-claim preferred_username
+        autocreate 1
+        default 0
+        scopes openid email profile groups
+        comment Factory-admin OIDC (Москва)
+
+# ─── На Proxmox-2 (Рязань) использовать client-id proxmox-rzn вместо proxmox-msk: ───
+# openid: keycloak-factory-admin
+#         issuer-url https://login.example.com/realms/factory-admin
+#         client-id proxmox-rzn
+#         client-key REPLACE_WITH_CLIENT_SECRET_FROM_KC
+#         username-claim preferred_username
+#         autocreate 1
+#         default 0
+#         scopes openid email profile groups
+#         comment Factory-admin OIDC (Рязань)
+
+# Redirect URIs (уже в realm-export auth/realms/factory-admin.json):
+#   proxmox-msk: https://proxmox-msk.example.com/, https://proxmox-msk.example.com/#*
+#   proxmox-rzn: https://proxmox-rzn.example.com/, https://proxmox-rzn.example.com/#*
+# Группы → роли Proxmox: маппинг через autocreate + ручной pveum acl modify
+# (Proxmox не маппит OIDC-groups автоматически в роли — нужен скрипт).

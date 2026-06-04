@@ -1,0 +1,36 @@
+factory/identity/ — map сервисов и их realm
+═════════════════════════════════════════════════════════════════════════
+
+REALM factory-admin (2FA WebAuthn, длинные пароли)
+─────────────────────────────────────────────────────
+  netbird               → Phase 2 (factory/netbird/management.json)
+  forward-auth-admin    → Phase 7 (factory/identity/traefik-forward-auth/)
+  proxmox-msk           → Phase 7 (factory/identity/proxmox/)
+  proxmox-rzn           → Phase 7 (factory/identity/proxmox/) — тот же snippet, другой client-id
+  grafana               → Phase 7 (factory/identity/grafana/)
+  gitlab                → Phase 7 (factory/identity/gitlab/)
+
+REALM family (облегчённая политика, OTP опционально)
+─────────────────────────────────────────────────────
+  jellyfin              → Phase 7 (factory/identity/jellyfin/)
+  seerr                 → Phase 7 (factory/identity/seerr/)
+  nextcloud             → Phase 7 (factory/identity/nextcloud/)
+
+Group-ACL (через oauth2-proxy + group claim в JWT):
+─────────────────────────────────────────────────────
+  netadmins             → полный admin + GrafanaAdmin
+  office-staff          → Editor в Grafana, доступ к office-LAN
+  home-power-users      → site-admin home, доступ к media-стек админкам
+  family-members        → user в Jellyfin/Seerr/Nextcloud
+  family-guests         → guest (read-only) в Jellyfin
+
+Redirect URIs всех клиентов хранятся в auth/realms/{factory-admin,family}.json.
+Изменение redirect → правка realm-export → import-realm на следующем deploy.
+
+Установка одного сервиса:
+  1. Открыть factory/identity/<service>/*.snippet
+  2. Прочитать комменты-инструкции
+  3. Заменить REPLACE_WITH_CLIENT_SECRET_FROM_KC реальным secret
+     (получить: KC UI → realm → Clients → <id> → Credentials)
+  4. Применить snippet на целевом сервисе (config-патч / API-call / occ)
+  5. Smoke-test: открыть сервис → SSO-button → авторизация
