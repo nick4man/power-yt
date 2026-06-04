@@ -1,0 +1,9 @@
+{# Подключает локальный LAN-iface site-gw к bridge соответствующего VNI.
+   Используем первый announced_vni как «основной» — обычно у site-gw один. -#}
+# Управляется Ansible. Локальный LAN {{ local_lan_iface }} → {{ fabric_vnis[announced_vnis[0]].bridge }}.
+
+[Match]
+Name={{ local_lan_iface }}
+
+[Network]
+Bridge={{ fabric_vnis[announced_vnis[0]].bridge }}

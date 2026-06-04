@@ -1,0 +1,80 @@
+---
+# ═══════════════════════════════════════════════════════════════════════
+#  Одноразовая миграция media-сегмента из sod-туннеля (10.10.0.0/24)
+#  в EVPN VNI 10400 (10.40.0.0/24).
+#
+#  Сценарий:
+#    Сейчас media-host (10.10.0.189) ↔ cdn через AmneziaWG sod-туннель.
+#    После миграции:
+#      - VNI 10400 + br-media на обоих узлах через role evpn
+#      - cdn-Traefik upstreams: 10.10.0.189 → media-host.netbird.fabric
+#      - sod-туннель остаётся параллельно (fallback) ~1 неделя проверок
+#      - после — systemctl disable awg-quick@sod
+#
+#  Usage:
+#    ansible-playbook playbooks/migrate-media-vni.yml --limit media-host,cdn
+#
+#  Pre-flight:
+#    - Phase 1-3 deployed (Keycloak + NetBird mgmt + Ansible base/gw)
+#    - media-host и cdn зарегистрированы в NetBird
+# ═══════════════════════════════════════════════════════════════════════
+
+- name: Migrate media segment to VNI 10400 (parallel deploy, не отключаем sod)
+  hosts: media-host:cdn
+  become: true
+  serial: 1
+  vars:
+    # Локальный override: гоним только VNI media — не трогаем office/home/iot
+    announced_vnis: [media]
+
+  pre_tasks:
+    - name: Подтвердить, что media в announced_vnis узла (inventory)
+      ansible.builtin.assert:
+        that: "'media' in (hostvars[inventory_hostname].announced_vnis | default([]))"
+        fail_msg: |
+          {{ inventory_hostname }}: 'media' отсутствует в announced_vnis inventory.
+          Добавь его в host_vars/{{ inventory_hostname }}.yml перед миграцией.
+
+    - name: Проверить, что sod-туннель ещё активен (fallback должен работать!)
+      ansible.builtin.command:
+        cmd: ip -br link show sod
+      register: sod_check
+      changed_when: false
+      failed_when: false
+
+    - name: Warn если sod уже выключен
+      ansible.builtin.debug:
+        msg: |
+          ⚠ sod-туннель не активен на {{ inventory_hostname }}.
+          Если миграция упадёт — fallback нет.
+      when: sod_check.rc != 0
+
+  roles:
+    - role: evpn
+
+  post_tasks:
+    - name: Дождаться, пока FRR поднимет EVPN-сессию
+      ansible.builtin.command:
+        cmd: vtysh -c 'show bgp l2vpn evpn summary json'
+      register: evpn_summary
+      retries: 12
+      delay: 5
+      until: '"peerCount" in evpn_summary.stdout'
+      changed_when: false
+
+    - name: Проверить, что VNI 10400 виден в BGP EVPN
+      ansible.builtin.command:
+        cmd: vtysh -c 'show bgp l2vpn evpn vni 10400'
+      register: vni_check
+      changed_when: false
+      failed_when: '"VNI: 10400" not in vni_check.stdout'
+
+    - name: Финальный отчёт
+      ansible.builtin.debug:
+        msg: |
+          ✓ media VNI 10400 поднят на {{ inventory_hostname }}.
+          Следующий шаг (на cdn):
+            обновить traefik dynamic.yml — upstream sonarr/radarr/etc с
+            http://10.10.0.189:<port> → http://media-host.netbird.fabric:<port>
+          Sod-туннель ОСТАЁТСЯ параллельно ~7 дней. После проверок:
+            systemctl disable --now awg-quick@sod

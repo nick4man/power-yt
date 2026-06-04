@@ -1,0 +1,15 @@
+# Управляется Ansible. Bridge {{ fabric_vnis[item].bridge }} (VNI {{ fabric_vnis[item].vni }}).
+# IPForward=yes — без этого forward между bridge и uplink не работает.
+# NeighborSuppression=yes — ARP/ND отвечаются локально из EVPN-таблицы (type-2 MAC/IP routes).
+# Learning=no — не учить MAC через data-plane, всё через FRR EVPN.
+
+[Match]
+Name={{ fabric_vnis[item].bridge }}
+
+[Network]
+ConfigureWithoutCarrier=yes
+IPForward=yes
+
+[Bridge]
+NeighborSuppression=yes
+Learning=no

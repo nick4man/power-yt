@@ -1,0 +1,11 @@
+# Управляется Ansible. vxlan-{{ item }} член bridge {{ fabric_vnis[item].bridge }}.
+
+[Match]
+Name=vxlan-{{ item }}
+
+[Network]
+Bridge={{ fabric_vnis[item].bridge }}
+
+[Bridge]
+Learning=no
+NeighborSuppression=yes

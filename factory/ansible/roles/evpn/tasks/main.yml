@@ -1,0 +1,125 @@
+---
+# ═══════════════════════════════════════════════════════════════════════
+#  EVPN data-plane: VXLAN VTEPs + Linux bridges + ARP-suppression.
+#  Применяется к узлам с непустым announced_vnis (site-gw, RR, member).
+#
+#  Принцип:
+#    - На каждый VNI из announced_vnis — один VXLAN-интерфейс + bridge.
+#    - VXLAN в режиме nolearning (MacLearning=no, без Remote) — endpoints
+#      приходят через FRR EVPN routes type-2/3.
+#    - Bridge с ARP/ND-suppression + Learning=no.
+#    - Site-gw дополнительно: bridges_ports — local_lan_iface (vmbr0 итд),
+#      пробрасывая локальный сегмент в overlay.
+#    - MSS clamping в forward chain (nftables).
+#
+#  Управляется через systemd-networkd (не /etc/network/interfaces).
+#  Все файлы — /etc/systemd/network/{10,15,20,30}-*-<vni>.{netdev,network}.
+# ═══════════════════════════════════════════════════════════════════════
+
+- name: Ensure systemd-networkd is enabled
+  ansible.builtin.service:
+    name: systemd-networkd
+    state: started
+    enabled: true
+
+- name: Verify announced_vnis is set
+  ansible.builtin.assert:
+    that: announced_vnis is defined
+    fail_msg: "announced_vnis должен быть задан в host_vars/inventory для {{ inventory_hostname }}"
+
+# ── 1. Linux bridges на каждый VNI ──────────────────────────────────────
+
+- name: Deploy bridge .netdev для каждого VNI
+  ansible.builtin.template:
+    src: bridge.netdev.j2
+    dest: "/etc/systemd/network/10-{{ fabric_vnis[item].bridge }}.netdev"
+    mode: '0644'
+  loop: "{{ announced_vnis }}"
+  loop_control:
+    label: "{{ fabric_vnis[item].bridge }} (VNI {{ fabric_vnis[item].vni }})"
+  notify: restart systemd-networkd
+
+- name: Deploy bridge .network для каждого VNI
+  ansible.builtin.template:
+    src: bridge.network.j2
+    dest: "/etc/systemd/network/15-{{ fabric_vnis[item].bridge }}.network"
+    mode: '0644'
+  loop: "{{ announced_vnis }}"
+  loop_control:
+    label: "{{ fabric_vnis[item].bridge }}"
+  notify: restart systemd-networkd
+
+# ── 2. VXLAN VTEPs (nolearning, source=loopback) ────────────────────────
+
+- name: Deploy VXLAN .netdev для каждого VNI
+  ansible.builtin.template:
+    src: vxlan.netdev.j2
+    dest: "/etc/systemd/network/20-vxlan-{{ item }}.netdev"
+    mode: '0644'
+  loop: "{{ announced_vnis }}"
+  loop_control:
+    label: "vxlan-{{ item }} (VNI {{ fabric_vnis[item].vni }})"
+  notify: restart systemd-networkd
+
+- name: Deploy VXLAN .network (член bridge) для каждого VNI
+  ansible.builtin.template:
+    src: vxlan.network.j2
+    dest: "/etc/systemd/network/30-vxlan-{{ item }}.network"
+    mode: '0644'
+  loop: "{{ announced_vnis }}"
+  loop_control:
+    label: "vxlan-{{ item }} → {{ fabric_vnis[item].bridge }}"
+  notify: restart systemd-networkd
+
+# ── 3. Site-gw: подключить локальный LAN-iface к соответствующему bridge ────
+
+- name: Bridge local LAN iface к VNI bridge (site-gw only)
+  ansible.builtin.template:
+    src: lan-bridge-member.network.j2
+    dest: "/etc/systemd/network/40-{{ local_lan_iface }}.network"
+    mode: '0644'
+  when:
+    - fabric_role == 'site-gw'
+    - local_lan_iface is defined
+    - local_lan_subnet is defined
+    - announced_vnis | length > 0
+  notify: restart systemd-networkd
+
+# ── 4. MSS clamping для TCP в forward chain (PMTU) ──────────────────────
+
+- name: Install nftables for MSS clamping (gateways only)
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+  when:
+    - fabric_role in ['site-gw', 'rr-primary', 'rr-backup']
+    - ansible_os_family == 'Debian'
+
+- name: Ensure forward chain in nftables.conf has MSS clamping
+  ansible.builtin.blockinfile:
+    path: /etc/nftables.conf
+    create: true
+    mode: '0644'
+    marker: "# {mark} ANSIBLE EVPN MSS-CLAMP"
+    block: |
+      table inet fabric {
+        chain forward_mss {
+          type filter hook forward priority -150; policy accept;
+          # Кламп TCP MSS до PMTU — спасение от чёрных дыр Windows-host в офис-LAN
+          tcp flags syn / syn,rst tcp option maxseg size set rt mtu
+        }
+      }
+  when: fabric_role in ['site-gw', 'rr-primary', 'rr-backup']
+  notify: reload nftables
+
+# ── 5. FRR конфиг с l2vpn evpn — перезаписываем (gw role клал базовый) ──
+
+- name: Deploy frr.conf with l2vpn evpn AF
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../frr/templates/frr.conf.j2"
+    dest: /etc/frr/frr.conf
+    owner: frr
+    group: frr
+    mode: '0640'
+    backup: true
+  notify: restart frr

@@ -1,0 +1,18 @@
+# Управляется Ansible. VXLAN VTEP для VNI {{ fabric_vnis[item].vni }}.
+# Independent=yes означает: НЕТ remote endpoints и НЕТ multicast group.
+# FRR через EVPN routes type-3 (Inclusive Multicast Ethernet Tag) приносит
+# remote VTEPs в bridge fdb автоматически.
+# MacLearning=no — не учить через data-plane.
+
+[NetDev]
+Name=vxlan-{{ item }}
+Kind=vxlan
+MTUBytes={{ fabric_overlay_mtu }}
+
+[VXLAN]
+VNI={{ fabric_vnis[item].vni }}
+Local={{ fabric_loopback }}
+DestinationPort=4789
+MacLearning=no
+Independent=yes
+ReduceARPProxy=yes

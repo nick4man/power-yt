@@ -1,17 +1,15 @@
 ! ═══════════════════════════════════════════════════════════════════════
-!  FRRouting конфиг для peer'а фабрики (Phase 3 минимум — Phase 4 расширит EVPN).
+!  FRRouting конфиг для peer'а фабрики (Phase 4 — iBGP + EVPN).
 !  Генерируется Ansible-template из inventory + group_vars/all.yml.
 !  Правки руками будут стёрты следующим прогоном playbook'а.
 !
-!  Что есть сейчас (Phase 3):
-!    - iBGP к Route-Reflectors (rr_peers из group_vars/all.yml)
-!    - AS=fabric_as (private 65000)
-!    - update-source=loopback (fabric_loopback)
+!  Address-families:
+!    - ipv4 unicast    : underlay reachability (loopbacks, local LANs, default)
+!    - l2vpn evpn      : overlay membership (VNI MAC/IP routes type-2/3)
 !
-!  Что добавит Phase 4 (role evpn):
-!    - address-family l2vpn evpn + advertise-all-vni
-!    - vxlan-* интерфейсы через systemd-networkd
-!    - linux bridges с членством в VXLAN VTEP
+!  Site-gw / exit / member peer'ятся ТОЛЬКО к RR — full-mesh не нужен.
+!  RR-узлы делают route-reflection для всех остальных + сами VTEP-able
+!  (если announced_vnis непуст).
 ! ═══════════════════════════════════════════════════════════════════════
 frr version 8.4
 frr defaults traditional
@@ -45,7 +43,19 @@ router bgp {{ fabric_as }}
   network {{ fabric_loopback }}/32
  exit-address-family
  !
- ! Phase 4: add address-family l2vpn evpn here (advertise-all-vni)
+ address-family l2vpn evpn
+{% for h in groups['all'] | reject('match', inventory_hostname) %}
+{% if hostvars[h].fabric_loopback is defined %}
+  neighbor {{ hostvars[h].fabric_loopback }} activate
+  neighbor {{ hostvars[h].fabric_loopback }} route-reflector-client
+{% endif %}
+{% endfor %}
+{% if announced_vnis is defined and announced_vnis | length > 0 %}
+  advertise-all-vni
+  advertise-default-gw
+  advertise-svi-ip
+{% endif %}
+ exit-address-family
 exit
 {% else %}
 ! ─── Этот узел — site-gw / exit / member (НЕ route-reflector) ──────────
@@ -72,7 +82,18 @@ router bgp {{ fabric_as }}
 {% endif %}
  exit-address-family
  !
- ! Phase 4: add address-family l2vpn evpn here
+ address-family l2vpn evpn
+{% for rr in rr_peers %}
+  neighbor {{ rr.loopback }} activate
+{% endfor %}
+{% if announced_vnis is defined and announced_vnis | length > 0 %}
+  advertise-all-vni
+{% if fabric_role == 'site-gw' %}
+  advertise-default-gw
+  advertise-svi-ip
+{% endif %}
+{% endif %}
+ exit-address-family
 exit
 {% endif %}
 !

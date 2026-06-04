@@ -1,0 +1,14 @@
+# Управляется Ansible — правки руками будут стёрты.
+# Linux bridge для VNI {{ fabric_vnis[item].vni }} (overlay {{ fabric_vnis[item].overlay_subnet }}).
+# ARP/ND-suppression + Learning=no — broadcast-storm защита через EVPN type-2 routes.
+
+[NetDev]
+Name={{ fabric_vnis[item].bridge }}
+Kind=bridge
+MTUBytes={{ fabric_overlay_mtu }}
+
+[Bridge]
+DefaultPVID=none
+VLANFiltering=no
+MulticastSnooping=no
+STP=no

@@ -49,3 +49,12 @@
     - role: exit
       when: fabric_role == 'exit'
       tags: [exit]
+
+    # Phase 4: VXLAN VTEPs + bridges + ARP-suppression + MSS-clamping +
+    # переписывание frr.conf под l2vpn-evpn AF.
+    # Запускается на любом узле с announced_vnis (site-gw, RR, member).
+    - role: evpn
+      when:
+        - announced_vnis is defined
+        - announced_vnis | length > 0
+      tags: [evpn]
