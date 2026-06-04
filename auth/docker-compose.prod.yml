@@ -51,8 +51,11 @@ services:
       KC_PROXY_HEADERS: xforwarded
     volumes:
       - ./realms:/opt/keycloak/data/import:ro
-    ports:
-      - "${BIND_IP}:8080:8080"               # edge → http://<BIND>:8080 (login.example.com)
+    # NB: НЕ публикуем :8080 на хост — edge/Traefik ходит на keycloak:8080 через
+    # docker-сеть (auth_edge), published-порт не нужен. На mgmt-узле за sing-box
+    # порт :8080 занят shadowsocks-inbound туннеля (listen "::":8080) — публикация
+    # KC на хост вызывала bind-конфликт и crash-loop sing-box. Доступ к KC —
+    # только через edge (HTTPS) или `docker exec`.
 
   oauth2-proxy:
     environment:
