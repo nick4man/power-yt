@@ -1,0 +1,209 @@
+{
+  "realm": "factory-admin",
+  "displayName": "Factory Admin",
+  "displayNameHtml": "<strong>Factory</strong> Admin",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "accessTokenLifespan": 600,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "passwordPolicy": "length(12) and notUsername and notEmail and specialChars(1) and digits(1) and upperCase(1)",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
+  "webAuthnPolicyRpEntityName": "Factory Admin",
+  "webAuthnPolicyRpId": "login.example.com",
+  "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
+  "webAuthnPolicyAttestationConveyancePreference": "not specified",
+  "webAuthnPolicyAuthenticatorAttachment": "not specified",
+  "webAuthnPolicyRequireResidentKey": "not specified",
+  "webAuthnPolicyUserVerificationRequirement": "preferred",
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 10
+    },
+    {
+      "alias": "webauthn-register",
+      "name": "Webauthn Register",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 70
+    }
+  ],
+  "groups": [
+    { "name": "netadmins",
+      "attributes": {},
+      "realmRoles": ["factory-admin"],
+      "clientRoles": {} },
+    { "name": "office-staff",
+      "attributes": {},
+      "realmRoles": ["operator"],
+      "clientRoles": {} },
+    { "name": "home-power-users",
+      "attributes": {},
+      "realmRoles": ["site-admin"],
+      "clientRoles": {} }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "factory-admin",
+        "description": "Полный admin фабрики (все сайты, все policy)",
+        "composite": false },
+      { "name": "site-admin",
+        "description": "Admin одного сайта/гейтвея",
+        "composite": false },
+      { "name": "operator",
+        "description": "Read + restart сервисов, без правки топологии",
+        "composite": false }
+    ]
+  },
+  "defaultRoles": ["offline_access", "uma_authorization"],
+  "clients": [
+    {
+      "clientId": "netbird",
+      "name": "NetBird Management",
+      "description": "OIDC IdP для NetBird membership и dashboard-login",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [
+        "https://nb.example.com/peers",
+        "https://nb.example.com/*"
+      ],
+      "webOrigins": ["https://nb.example.com"],
+      "attributes": {
+        "post.logout.redirect.uris": "https://nb.example.com/+",
+        "access.token.lifespan": "3600"
+      },
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "forward-auth-admin",
+      "name": "Traefik forward-auth (admin services)",
+      "description": "Защита админок медиа-стека: sonarr/radarr/prowlarr/bazarr/qbit/cleanuparr/jellystat/tdarr",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://media.example.com/oauth2/callback",
+        "https://*.media.example.com/oauth2/callback"
+      ],
+      "webOrigins": ["https://media.example.com"],
+      "attributes": {
+        "post.logout.redirect.uris": "https://media.example.com/+",
+        "access.token.lifespan": "3600"
+      },
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    },
+    {
+      "clientId": "proxmox-msk",
+      "name": "Proxmox-1 (Moscow office)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://proxmox-msk.example.com/",
+        "https://proxmox-msk.example.com/#*"
+      ],
+      "webOrigins": ["https://proxmox-msk.example.com"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    },
+    {
+      "clientId": "proxmox-rzn",
+      "name": "Proxmox-2 (Ryazan home)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://proxmox-rzn.example.com/",
+        "https://proxmox-rzn.example.com/#*"
+      ],
+      "webOrigins": ["https://proxmox-rzn.example.com"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    },
+    {
+      "clientId": "grafana",
+      "name": "Grafana (factory observability)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://grafana.example.com/login/generic_oauth"
+      ],
+      "webOrigins": ["https://grafana.example.com"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "description": "OIDC group membership claim для ACL в NetBird/Grafana/Proxmox",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "smtpServer": {},
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["en", "ru"],
+  "defaultLocale": "en"
+}

@@ -1,0 +1,124 @@
+{
+  "realm": "family",
+  "displayName": "Family",
+  "displayNameHtml": "<strong>Family</strong> portal",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 30,
+  "maxFailureWaitSeconds": 600,
+  "accessTokenLifespan": 1800,
+  "ssoSessionIdleTimeout": 7200,
+  "ssoSessionMaxLifespan": 86400,
+  "offlineSessionIdleTimeout": 2592000,
+  "passwordPolicy": "length(8) and notUsername",
+  "otpPolicyType": "totp",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "groups": [
+    { "name": "family-members",
+      "attributes": {},
+      "realmRoles": ["user"],
+      "clientRoles": {} },
+    { "name": "family-guests",
+      "attributes": {},
+      "realmRoles": ["guest"],
+      "clientRoles": {} }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "user",
+        "description": "Полный доступ к family-сервисам (Jellyfin, Seerr, Nextcloud)",
+        "composite": false },
+      { "name": "guest",
+        "description": "Ограниченный доступ — только Jellyfin watch, без запросов",
+        "composite": false }
+    ]
+  },
+  "defaultRoles": ["offline_access"],
+  "clients": [
+    {
+      "clientId": "jellyfin",
+      "name": "Jellyfin (media server)",
+      "description": "OIDC SSO для семейного Jellyfin",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://jellyfin.example.com/sso/OID/redirect/keycloak"
+      ],
+      "webOrigins": ["https://jellyfin.example.com"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    },
+    {
+      "clientId": "seerr",
+      "name": "Jellyseerr (request portal)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://seerr.example.com/login/oidc/callback"
+      ],
+      "webOrigins": ["https://seerr.example.com"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    },
+    {
+      "clientId": "nextcloud",
+      "name": "Nextcloud",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://cloud.example.com/apps/user_oidc/code"
+      ],
+      "webOrigins": ["https://cloud.example.com"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "description": "OIDC group membership claim",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "internationalizationEnabled": true,
+  "supportedLocales": ["en", "ru"],
+  "defaultLocale": "ru"
+}

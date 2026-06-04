@@ -1,27 +1,40 @@
 # ═════════════════════════════════════════════════════════════════════
-#  Прод-оверрайд для ТРЕТЬЕЙ МАШИНЫ (поверх docker-compose.yml).
-#  Применяется ТОЛЬКО с профилем core (edge-роль играет реальный Traefik на VDS).
+#  Прод-оверрайд для MGMT-узла фабрики (mgmt-eu в Phase 1).
+#  Поверх docker-compose.yml; применяется с профилем core.
 #    docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d
+#
 #  Отличия от локального стенда:
-#    - порты keycloak/oauth2-proxy публикуются на WG-адрес (${BIND_IP}) → их видит VDS-Traefik
-#    - Keycloak: start (strict hostname), health включён
-#    - oauth2-proxy: secure-cookie (за HTTPS на VDS)
-#  Значения — из .env (на проде генерируется CI из GitHub Secrets).
+#    - Keycloak: start (strict hostname), health включён, --import-realm
+#    - Realms factory-admin + family бутстрапятся из ./realms/*.json
+#    - oauth2-proxy: secure-cookie (за HTTPS на edge)
+#    - Порты публикуются на ${BIND_IP}:
+#         0.0.0.0          — если edge (caddy/traefik/CF Tunnel) на той же VPS
+#         <WG>/<NetBird>   — если доступ через overlay-туннель (после Phase 2)
+#         <public IP>      — если KC прямо наружу (требует KC_HTTPS_*, не рекомендуется)
+#
+#  Edge для mgmt-eu (Phase 1.5, вне этого compose):
+#    - Cloudflare Tunnel (cloudflared) с DNS-01 — самый простой путь под CF DNS
+#    - Caddy с DNS-01 через cloudflare-plugin — если нужен свой edge
+#    - Traefik с теми же DNS-01 параметрами (как на cdn-VDS) — единая технология
+#
+#  Значения — из .env (на CI генерируется из GitHub Secrets).
 # ═════════════════════════════════════════════════════════════════════
 services:
   keycloak:
-    command: ["start"]
+    command: ["start", "--import-realm"]     # idempotent bootstrap realms из ./realms/*.json
     environment:
       KC_HOSTNAME: ${KC_HOSTNAME_URL}        # https://login.example.com
       KC_HOSTNAME_STRICT: "true"
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
+    volumes:
+      - ./realms:/opt/keycloak/data/import:ro
     ports:
-      - "${BIND_IP}:8080:8080"               # VDS-Traefik → http://<WG>:8080 (login.example.com)
+      - "${BIND_IP}:8080:8080"               # edge → http://<BIND>:8080 (login.example.com)
 
   oauth2-proxy:
     environment:
-      OAUTH2_PROXY_COOKIE_SECURE: "true"     # за HTTPS на VDS
+      OAUTH2_PROXY_COOKIE_SECURE: "true"     # за HTTPS на edge
     ports:
-      - "${BIND_IP}:4180:4180"               # forwardAuth-цель для VDS-Traefik
+      - "${BIND_IP}:4180:4180"               # forwardAuth-цель для edge-Traefik (cdn или mgmt-edge)

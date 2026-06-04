@@ -30,6 +30,7 @@ jobs:
           OAUTH2_CLIENT_ID=media-proxy
           OAUTH2_CLIENT_SECRET=dummy
           OAUTH2_COOKIE_SECRET=0123456789abcdef0123456789abcdef
+          OAUTH2_ALLOWED_GROUPS=
           COOKIE_DOMAIN=.lab.test
           BIND_IP=127.0.0.1
           EOF
@@ -71,13 +72,14 @@ jobs:
           KC_DB_PASSWORD=${{ secrets.KC_DB_PASSWORD }}
           KC_ADMIN_USER=${{ secrets.KC_ADMIN_USER }}
           KC_ADMIN_PASSWORD=${{ secrets.KC_ADMIN_PASSWORD }}
-          KC_PUBLIC_HOST=login.example.com
-          KC_HOSTNAME_URL=https://login.example.com
-          OIDC_ISSUER_URL=https://login.example.com/realms/media
+          KC_PUBLIC_HOST=login.${{ secrets.FABRIC_DOMAIN }}
+          KC_HOSTNAME_URL=https://login.${{ secrets.FABRIC_DOMAIN }}
+          OIDC_ISSUER_URL=https://login.${{ secrets.FABRIC_DOMAIN }}/realms/factory-admin
           OAUTH2_CLIENT_ID=${{ secrets.OAUTH2_CLIENT_ID }}
           OAUTH2_CLIENT_SECRET=${{ secrets.OAUTH2_CLIENT_SECRET }}
           OAUTH2_COOKIE_SECRET=${{ secrets.OAUTH2_COOKIE_SECRET }}
-          COOKIE_DOMAIN=.example.com
+          OAUTH2_ALLOWED_GROUPS=${{ secrets.OAUTH2_ALLOWED_GROUPS }}
+          COOKIE_DOMAIN=.${{ secrets.FABRIC_DOMAIN }}
           BIND_IP=${{ secrets.THIRD_WG_IP }}
           EOF
 
@@ -88,13 +90,36 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core pull &&
             docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d --remove-orphans'
 
-      - name: Smoke test
+      - name: Smoke test — Keycloak realms + oauth2-proxy OIDC discovery
         run: |
           ssh -i ~/.ssh/id_deploy -p "$SSHP" "$DEST" '
-            cd ~/auth &&
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core ps &&
+            set -e
+            cd ~/auth
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core ps
+
+            echo "==> 1/3 Keycloak HTTP health"
+            for i in $(seq 1 30); do
+              docker exec keycloak curl -fsS http://localhost:8080/health/ready >/dev/null 2>&1 && break || sleep 5
+            done
+            docker exec keycloak curl -fsS http://localhost:8080/health/ready >/dev/null
+            echo "   ✓ Keycloak ready"
+
+            echo "==> 2/3 realms factory-admin + family импортированы"
+            for r in factory-admin family; do
+              docker exec keycloak curl -fsS \
+                "http://localhost:8080/realms/$r/.well-known/openid-configuration" \
+                | grep -q "\"issuer\":\"https://login.${{ secrets.FABRIC_DOMAIN }}/realms/$r\""
+              echo "   ✓ realm $r"
+            done
+
+            echo "==> 3/3 oauth2-proxy OIDC discovery"
             for i in $(seq 1 20); do
-              docker logs oauth2-proxy 2>&1 | grep -q "OAuthProxy configured" && { echo "✓ oauth2-proxy сконфигурирован (OIDC discovery ок)"; exit 0; }
+              docker logs oauth2-proxy 2>&1 | grep -q "OAuthProxy configured" && {
+                echo "   ✓ oauth2-proxy сконфигурирован"
+                exit 0
+              }
               sleep 5
             done
-            echo "✗ oauth2-proxy не поднялся (проверьте DNS login.example.com и маршрут VDS→WG)"; docker logs oauth2-proxy 2>&1 | tail -15; exit 1'
+            echo "   ✗ oauth2-proxy не поднялся:"
+            docker logs oauth2-proxy 2>&1 | tail -20
+            exit 1'
