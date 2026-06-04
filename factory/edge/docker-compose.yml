@@ -1,0 +1,57 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Edge-Traefik для mgmt-узла фабрики (Phase 1.5).
+#  Терминирует TLS (Let's Encrypt DNS-01 через Cloudflare) и проксирует
+#  публичные хосты на внутренние сервисы:
+#    login.<FABRIC_DOMAIN>   → keycloak:8080   (Phase 1)
+#    nb.<FABRIC_DOMAIN>      → nb-dashboard/management (Phase 2)
+#    grafana.<FABRIC_DOMAIN> → grafana:3000     (Phase 8)
+#
+#  DNS-01 выбран намеренно: mgmt-узел за split-routing/DPI, входящий :80
+#  ненадёжен для HTTP-01. DNS-01 проходит через TXT в Cloudflare —
+#  только исходящий к CF API, ноль зависимости от достижимости портов.
+#
+#  Сети: подключается к auth_edge (external, создан auth-стеком) — там
+#  живёт keycloak. Доступ к KC по имени контейнера: http://keycloak:8080.
+#
+#  Запуск:
+#    cp .env.example .env  &&  заполнить FABRIC_DOMAIN, ACME_EMAIL, CF_DNS_API_TOKEN
+#    ./render.sh                       # рендер dynamic/ из templates (подставит домен)
+#    docker compose up -d
+#    docker compose logs -f traefik    # ждать "Certificates obtained for [login.<domain>]"
+# ═══════════════════════════════════════════════════════════════════════
+services:
+  traefik:
+    image: traefik:latest
+    container_name: edge-traefik
+    restart: unless-stopped
+    command:
+      - --global.sendanonymoususage=false
+      - --api.dashboard=true
+      - --api.insecure=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      - --providers.file.directory=/dynamic
+      - --providers.file.watch=true
+    environment:
+      # Cloudflare API token (Zone:DNS:Edit + Zone:Zone:Read для вашего домена)
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./dynamic:/dynamic:ro
+      - ./acme:/acme
+    networks:
+      - auth_edge
+
+networks:
+  auth_edge:
+    external: true

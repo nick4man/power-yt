@@ -38,3 +38,9 @@ factory/ansible/host_vars/*.local.yml
 factory/terraform/*.tfvars
 factory/terraform/.terraform/
 factory/terraform/terraform.tfstate*
+# edge: rendered dynamic config (содержит реальный домен) + ACME cert storage
+factory/edge/dynamic/
+factory/edge/acme/
+factory/dns/*.tfvars
+factory/dns/.terraform/
+factory/dns/terraform.tfstate*
