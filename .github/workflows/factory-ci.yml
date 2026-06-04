@@ -1,0 +1,92 @@
+name: factory-ci
+
+# Валидация IaC: ansible-lint, terraform validate, docker-compose config, yamllint.
+# Запускается на push в main + PR на factory/ + ручной trigger.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'factory/**'
+      - '.github/workflows/factory-ci.yml'
+  pull_request:
+    paths: ['factory/**']
+  workflow_dispatch: {}
+
+jobs:
+  # ── 1. Ansible: lint playbooks + roles ────────────────────────────────
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install ansible + ansible-lint
+        run: pip install ansible-core ansible-lint
+      - name: Install required collections
+        run: |
+          ansible-galaxy collection install community.docker ansible.posix ansible.utils
+      - name: Lint
+        working-directory: factory/ansible
+        run: ansible-lint playbooks/ roles/ --offline || true   # warnings не блочат
+
+  # ── 2. Terraform: validate + fmt-check (matrix по каталогам) ──────────
+  terraform-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [terraform, dns]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: '1.9.x' }
+      - name: terraform init (no backend)
+        working-directory: factory/${{ matrix.dir }}
+        run: terraform init -backend=false
+      - name: terraform validate
+        working-directory: factory/${{ matrix.dir }}
+        run: terraform validate
+      - name: terraform fmt -check
+        working-directory: factory/${{ matrix.dir }}
+        run: terraform fmt -check -recursive
+
+  # ── 3. Docker Compose: config -q (matrix по стэкам) ───────────────────
+  compose-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: [netbird, replica, observability]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate ${{ matrix.stack }} compose
+        working-directory: factory/${{ matrix.stack }}
+        run: |
+          # Подсунуть .env с дефолтами (если есть .env.example — копируем заглушки)
+          [ -f .env.example ] && cp .env.example .env || true
+          # Для каждого стэка свои обязательные переменные
+          export FABRIC_DOMAIN=example.com
+          export MGMT_PUBLIC_IP=192.0.2.1
+          export BIND_IP=127.0.0.1
+          export PG_PRIMARY_HOST=mgmt-eu
+          export PG_REPLICATION_PASSWORD=dummy
+          export KC_DB_PASSWORD=dummy
+          export KC_HOSTNAME_URL=https://login.example.com
+          export GF_ROOT_URL=https://grafana.example.com
+          export GF_ADMIN_USER=admin
+          export GF_ADMIN_PASSWORD=x
+          export TG_BOT_TOKEN=x
+          export TG_CHAT_ID=1
+          export TURN_SHARED_SECRET=x
+          export TURN_PASSWORD=x
+          docker compose config -q
+          rm -f .env
+
+  # ── 4. yamllint на всём factory/ ──────────────────────────────────────
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: factory/
+          config_file: factory/.yamllint

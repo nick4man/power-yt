@@ -1,0 +1,91 @@
+name: factory-deploy
+
+# Применение Ansible-playbook к peer'ам.
+# ТОЛЬКО ручной trigger (workflow_dispatch) — никогда автоматом.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Группа или конкретный peer (Ansible --limit). Пример: gateways, exit-de'
+        required: true
+        default: 'all'
+        type: string
+      tags:
+        description: 'Ansible-теги (--tags). base / gw / evpn / exit / observability / netbird'
+        required: true
+        default: 'base'
+        type: choice
+        options: [all, base, gw, evpn, exit, observability]
+      dry_run:
+        description: 'Только plan (--check)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  ansible-deploy:
+    runs-on: ubuntu-latest
+    environment: production       # включить required reviewers в repo settings
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Install ansible + collections
+        run: |
+          pip install ansible-core
+          ansible-galaxy collection install community.docker ansible.posix ansible.utils
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.FABRIC_SSH_KEY }}" > ~/.ssh/id_fabric
+          chmod 600 ~/.ssh/id_fabric
+          ssh-keyscan -H ${{ secrets.MGMT_EU_IP }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H ${{ secrets.CDN_IP }}     >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Render inventory with real IPs (envsubst placeholders)
+        working-directory: factory/ansible
+        env:
+          MGMT_EU_IP:       ${{ secrets.MGMT_EU_IP }}
+          CDN_IP:           ${{ secrets.CDN_IP }}
+          OFFICE_MSK_GW_IP: ${{ secrets.OFFICE_MSK_GW_IP }}
+          HOME_RZN_GW_IP:   ${{ secrets.HOME_RZN_GW_IP }}
+          IOT_GW_IP:        ${{ secrets.IOT_GW_IP }}
+          EXIT_DE_IP:       ${{ secrets.EXIT_DE_IP }}
+          EXIT_NL_IP:       ${{ secrets.EXIT_NL_IP }}
+          EXIT_JP_IP:       ${{ secrets.EXIT_JP_IP }}
+        run: |
+          # Inventory содержит placeholder'ы вида ansible_host: REPLACE_WITH_PUBLIC_IP.
+          # На CI заменяем sed'ом — каждый peer по имени в YAML.
+          cp inventory.yml inventory.runtime.yml
+          for h in mgmt-eu-1 cdn office-msk-gw home-rzn-gw iot-gw exit-de exit-nl exit-jp; do
+            var_name=$(echo $h | tr 'a-z-' 'A-Z_')_IP
+            var_value=${!var_name:-}
+            [ -n "$var_value" ] && sed -i "/^        $h:$/,/^        [a-z]/ s|REPLACE_WITH_PUBLIC_IP|$var_value|" inventory.runtime.yml
+            [ -n "$var_value" ] && sed -i "/^        $h:$/,/^        [a-z]/ s|REPLACE_WITH_LAN_IP|$var_value|" inventory.runtime.yml
+          done
+
+      - name: ansible-playbook bootstrap
+        working-directory: factory/ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          NETBIRD_SETUP_KEY:         ${{ secrets.NETBIRD_SETUP_KEY }}
+          PG_EXPORTER_PASSWORD:      ${{ secrets.PG_EXPORTER_PASSWORD }}
+        run: |
+          TAGS="${{ inputs.tags }}"
+          [ "$TAGS" = "all" ] && TAGS=""
+          CHECK=""
+          [ "${{ inputs.dry_run }}" = "true" ] && CHECK="--check --diff"
+
+          ansible-playbook \
+            -i inventory.runtime.yml \
+            playbooks/bootstrap.yml \
+            --limit '${{ inputs.target }}' \
+            ${TAGS:+--tags "$TAGS"} \
+            $CHECK \
+            --private-key ~/.ssh/id_fabric \
+            --extra-vars "netbird_setup_key=$NETBIRD_SETUP_KEY pg_exporter_password=$PG_EXPORTER_PASSWORD"

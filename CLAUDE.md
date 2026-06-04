@@ -40,3 +40,19 @@ docker compose ps                                        # healthy после st
 - **Внешний доступ**: порты публикуются на `BIND_IP` (WireGuard-интерфейс), реверс-прокси — Traefik на удалённом VDS. Не биндить на `0.0.0.0`.
 - **Отказоустойчивость**: на хосте уже работает контейнер `autoheal` — рестартит сервисы с меткой `autoheal=true` при статусе unhealthy.
 - **Соседи на хосте**: Nextcloud-стек (postgres/redis/collabora) + nginx-proxy-manager. Не конфликтовать по портам, помнить про общий Docker.
+
+## Overlay-фабрика (`factory/`)
+
+Параллельный субпроект в этом репо — multi-site overlay-фабрика поверх AmneziaWG.
+Media-стэк станет членом фабрики (VNI media, миграция `10.10.0.189` → `10.40.0.6`).
+
+- **План**: `/home/q/.claude/plans/quizzical-orbiting-whisper.md`
+- **Архитектура**: [`factory/docs/architecture.md`](factory/docs/architecture.md)
+- **Ежедневные операции**: [`factory/docs/runbook.md`](factory/docs/runbook.md)
+- **Сценарии отказа**: [`factory/docs/recovery.md`](factory/docs/recovery.md)
+- **Identity-map**: [`factory/identity/MAP.txt`](factory/identity/MAP.txt)
+
+Стек: NetBird (membership/OIDC) + FRR (iBGP+EVPN) + Linux VXLAN (L2-stretch) +
+Keycloak (factory-admin + family realms) + Prometheus/Grafana. Управление через
+`factory/ansible/` (playbook `bootstrap.yml`) + `factory/terraform/` (exit-VPS
+lifecycle). CI/CD: `.github/workflows/factory-{ci,deploy}.yml`.
