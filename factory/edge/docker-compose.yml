@@ -38,6 +38,11 @@ services:
       - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
       - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      # Узел за sing-box с hijack-dns + ipv4_only — локальная propagation-проверка
+      # ломает TXT-резолюцию (NXDOMAIN). Отключаем её: создаём TXT, ждём delay,
+      # отдаём challenge LE — он проверяет TXT из глобального интернета напрямую.
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.disablepropagationcheck=true
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.delaybeforecheck=90s
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
     environment:
