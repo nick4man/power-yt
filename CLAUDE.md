@@ -35,7 +35,7 @@ docker compose ps                                        # healthy после st
 - **SELinux включён (Enforcing)**: на `/data` (NFS) метки `:z` НЕ применять — NFS их не хранит. Доступ контейнеров к NFS уже разрешён булином **`virt_use_nfs=on`** (Nextcloud на этом хосте так и работает). Приватные `config` (локальный btrfs) — с `:Z`.
 - **NFS-маунт `/data`**: юнит `WantedBy` (НЕ `Requires`) → если NAS недоступен, загрузка/Docker не блокируются. docker drop-in — только `After=` (без `Requires=`), чтобы падение media-NFS не утянуло Docker и соседний Nextcloud.
 - **GPU**: NVIDIA через `runtime: nvidia` (НЕ `/dev/dri`-проброс). RTX 3070 Ti = **Ampere → AV1-encode не поддерживается**, в `encoding.xml` стоит `AllowAv1Encoding=false`. h264/hevc NVENC — ок.
-- **Единые `PUID=1000`/`PGID=3000`/`UMASK=002`** во всех сервисах (`.env`). Ключевое — `PUID=1000` (владелец данных на NAS); gid вторичен (правит ACL).
+- **Единые `PUID=1000`/`PGID=3001`/`UMASK=002`** во всех сервисах (`.env`). Ключевое — `PUID=1000` (владелец данных на NAS); gid вторичен (правит ACL).
 - **Секреты**: `.env` и `rclone/rclone.conf` в `.gitignore` (rclone-remote на хосте оставлены для справки/ручных операций; первичный бэкап — Cloud Sync на NAS).
 - **Внешний доступ**: порты публикуются на `BIND_IP` (WireGuard-интерфейс), реверс-прокси — Traefik на удалённом VDS. Не биндить на `0.0.0.0`.
 - **Отказоустойчивость**: на хосте уже работает контейнер `autoheal` — рестартит сервисы с меткой `autoheal=true` при статусе unhealthy.

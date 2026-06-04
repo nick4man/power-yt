@@ -9,7 +9,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
-PUID=1000; PGID=3000; UMASK=002
+PUID=1000; PGID=3001; UMASK=002
 DATA_ROOT=/mnt/storage/data
 [ -f .env ] && set -a && . ./.env && set +a
 
