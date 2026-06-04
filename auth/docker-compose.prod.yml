@@ -42,13 +42,22 @@ services:
       - "${BIND_IP}:5432:5432"               # standby (cdn) ходит сюда через overlay
 
   keycloak:
-    command: ["start", "--import-realm"]     # idempotent bootstrap realms из ./realms/*.json
+    # Optimized-образ: augmentation (kc.sh build, ~166s на 1 CPU) выполнен ОДИН раз
+    # на этапе сборки образа (auth/Dockerfile), а не при каждом `start`. Рестарт KC
+    # теперь ~10s вместо ~3 минут — критично для reboot-survival на mgmt-узле.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        KC_VERSION: "26.6.3"
+    image: power-yt/keycloak:26.6.3-optimized
+    command: ["start", "--optimized", "--import-realm"]   # --optimized: пропустить augmentation
     environment:
-      KC_HOSTNAME: ${KC_HOSTNAME_URL}        # https://login.example.com
-      KC_HOSTNAME_STRICT: "true"
-      KC_HEALTH_ENABLED: "true"
-      KC_HTTP_ENABLED: "true"
-      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: ${KC_HOSTNAME_URL}        # https://login.example.com  (runtime)
+      KC_HOSTNAME_STRICT: "true"             # runtime
+      KC_HTTP_ENABLED: "true"                # runtime
+      KC_PROXY_HEADERS: xforwarded           # runtime
+      # KC_DB / KC_HEALTH_ENABLED — build-time, запечены в Dockerfile (в runtime не дублируем)
     volumes:
       - ./realms:/opt/keycloak/data/import:ro
     # NB: НЕ публикуем :8080 на хост — edge/Traefik ходит на keycloak:8080 через
