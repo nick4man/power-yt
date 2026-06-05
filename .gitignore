@@ -41,6 +41,9 @@ factory/terraform/terraform.tfstate*
 # edge: rendered dynamic config (содержит реальный домен) + ACME cert storage
 factory/edge/dynamic/
 factory/edge/acme/
+# netbird: отрендеренные config.yaml/dashboard.env (реальный домен + relay/store секреты)
+factory/netbird/config.yaml
+factory/netbird/dashboard.env
 factory/dns/*.tfvars
 factory/dns/.terraform/
 factory/dns/terraform.tfstate*

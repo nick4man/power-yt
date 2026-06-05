@@ -57,7 +57,10 @@ services:
       - ./acme:/acme
     networks:
       - auth_edge
+      - netbird
 
 networks:
   auth_edge:
+    external: true
+  netbird:                 # создаётся стеком factory/netbird — edge ходит в netbird-server/dashboard
     external: true
