@@ -33,7 +33,6 @@
   "webAuthnPolicyAuthenticatorAttachment": "not specified",
   "webAuthnPolicyRequireResidentKey": "not specified",
   "webAuthnPolicyUserVerificationRequirement": "preferred",
-  "_comment_requiredActions": "Каждое действие ДОЛЖНО иметь providerId, иначе auth-flow падает (Unable to find factory for Required Action null). 2FA TOTP доступна, НЕ форсируется (defaultAction=false) — owner включит mandatory при желании. VERIFY_EMAIL не форсится: SMTP не настроен.",
   "requiredActions": [
     { "alias": "CONFIGURE_TOTP", "name": "Configure OTP", "providerId": "CONFIGURE_TOTP", "enabled": true, "defaultAction": false, "priority": 10, "config": {} },
     { "alias": "TERMS_AND_CONDITIONS", "name": "Terms and Conditions", "providerId": "TERMS_AND_CONDITIONS", "enabled": false, "defaultAction": false, "priority": 20, "config": {} },
@@ -56,7 +55,6 @@
       { "name": "operator", "description": "Read + restart сервисов, без правки топологии", "composite": false }
     ]
   },
-  "_comment_clients": "Клиенты БЕЗ defaultClientScopes → получают стандартные realm-дефолты (profile/email/roles/web-origins/acr/basic) автоматически. groups-claim scope доназначается post-import-скриптом. redirectUris с example.com свапаются на реальный домен в setup-factory-realm.sh.",
   "clients": [
     {
       "clientId": "netbird",
