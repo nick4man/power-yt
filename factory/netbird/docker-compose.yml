@@ -8,10 +8,10 @@
 #    - dashboard      — статика (nginx), OIDC-настройки в dashboard.env.
 #    - coturn БОЛЬШЕ НЕТ: STUN встроен, TURN заменён нативным relay (/relay WS).
 #
-#  СВЯЗЬ С Phase 1 (Keycloak factory-admin):
-#    - config.yaml server.auth.issuer → https://login.${FABRIC_DOMAIN}/realms/factory-admin
-#    - Клиент `netbird` в realm — публичный (PKCE dashboard + device-flow CLI).
-#    - НЕ встроенный Dex: внешний Keycloak как IdP напрямую.
+#  IdP — ВСТРОЕННЫЙ Dex (combined-контейнер не умеет внешний IdP, netbird #5335):
+#    - config.yaml server.auth.issuer → https://nb.${FABRIC_DOMAIN}/oauth2 (Dex).
+#    - Юзеры NetBird — в embedded Dex; owner через setup-wizard дашборда.
+#    - Keycloak factory-admin (Phase 1) — для ДРУГИХ сервисов, не для NetBird.
 #
 #  EDGE (factory/edge, Traefik file-provider) — отдельный стек:
 #    nb.${FABRIC_DOMAIN}/management.ManagementService/  → netbird-server:80 (h2c)

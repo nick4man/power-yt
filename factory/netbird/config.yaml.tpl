@@ -1,6 +1,11 @@
 # Рендерится render.sh (envsubst) → config.yaml (gitignored: реальный домен + секреты).
 # Combined netbird-server v0.71+: management + signal + relay + STUN в одном.
-# Auth — ВНЕШНИЙ Keycloak realm factory-admin (НЕ встроенный Dex /oauth2).
+#
+# Auth — ВСТРОЕННЫЙ Dex IdP. Combined-контейнер НЕ поддерживает внешний IdP
+# (netbird issue #5335: embedded Dex всегда включён и перекрывает HTTP auth-config).
+# Юзеры NetBird — в embedded Dex; owner создаётся через setup-wizard дашборда
+# при первом входе. Keycloak factory-admin — для ДРУГИХ сервисов (Jellyfin/Grafana/
+# Proxmox поддерживают external OIDC), НЕ для NetBird.
 server:
   listenAddress: ":80"
   exposedAddress: "https://nb.${FABRIC_DOMAIN}:443"
@@ -16,11 +21,9 @@ server:
   dataDir: "/var/lib/netbird"
 
   auth:
-    # Внешний Keycloak как IdP напрямую (issuer = realm). signKeyRefresh — ротация JWKS.
-    issuer: "https://login.${FABRIC_DOMAIN}/realms/factory-admin"
-    # audience — проверка claim `aud` в JWT. Совпадает с client `netbird` (audience-mapper в realm).
-    # NB: точное имя поля для external-IdP в v0.71 — ЭМПИРИЧЕСКАЯ проверка по логам netbird-server.
-    audience: "netbird"
+    # Встроенный Dex на /oauth2 (edge роутит /oauth2 → netbird-server:80).
+    issuer: "https://nb.${FABRIC_DOMAIN}/oauth2"
+    localAuthDisabled: false
     signKeyRefreshEnabled: true
     dashboardRedirectURIs:
       - "https://nb.${FABRIC_DOMAIN}/nb-auth"
@@ -29,8 +32,7 @@ server:
       - "http://localhost:53000/"
 
   reverseProxy:
-    # Доверяем X-Forwarded от edge-Traefik. 172.30.0.0/24 — docker-сеть netbird
-    # (edge подключается сюда external; единственный «прокси» в этой подсети).
+    # Доверяем X-Forwarded от edge-Traefik. 172.30.0.0/24 — docker-сеть netbird.
     trustedHTTPProxies:
       - "172.30.0.0/24"
 

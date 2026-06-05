@@ -1,12 +1,12 @@
 # Рендерится render.sh (envsubst ${FABRIC_DOMAIN}) → dashboard.env (gitignored).
-# OIDC dashboard NetBird — внешний Keycloak realm factory-admin, публичный client netbird.
+# OIDC dashboard NetBird — ВСТРОЕННЫЙ Dex IdP (combined-контейнер не умеет внешний
+# Keycloak, netbird issue #5335). client/audience netbird-dashboard, issuer /oauth2.
 NETBIRD_MGMT_API_ENDPOINT=https://nb.${FABRIC_DOMAIN}
 NETBIRD_MGMT_GRPC_API_ENDPOINT=https://nb.${FABRIC_DOMAIN}
-# OIDC — Keycloak (НЕ встроенный Dex). Публичный client → без secret, PKCE.
-AUTH_AUDIENCE=netbird
-AUTH_CLIENT_ID=netbird
+AUTH_AUDIENCE=netbird-dashboard
+AUTH_CLIENT_ID=netbird-dashboard
 AUTH_CLIENT_SECRET=
-AUTH_AUTHORITY=https://login.${FABRIC_DOMAIN}/realms/factory-admin
+AUTH_AUTHORITY=https://nb.${FABRIC_DOMAIN}/oauth2
 USE_AUTH0=false
 AUTH_SUPPORTED_SCOPES=openid profile email
 AUTH_REDIRECT_URI=/nb-auth
