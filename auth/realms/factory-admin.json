@@ -7,7 +7,7 @@
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
-  "resetPasswordAllowed": true,
+  "resetPasswordAllowed": false,
   "editUsernameAllowed": false,
   "bruteForceProtected": true,
   "permanentLockout": false,
@@ -27,56 +27,36 @@
   "otpPolicyLookAheadWindow": 1,
   "otpPolicyPeriod": 30,
   "webAuthnPolicyRpEntityName": "Factory Admin",
-  "webAuthnPolicyRpId": "login.example.com",
+  "webAuthnPolicyRpId": "",
   "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
   "webAuthnPolicyAttestationConveyancePreference": "not specified",
   "webAuthnPolicyAuthenticatorAttachment": "not specified",
   "webAuthnPolicyRequireResidentKey": "not specified",
   "webAuthnPolicyUserVerificationRequirement": "preferred",
+  "_comment_requiredActions": "Каждое действие ДОЛЖНО иметь providerId, иначе auth-flow падает (Unable to find factory for Required Action null). 2FA TOTP доступна, НЕ форсируется (defaultAction=false) — owner включит mandatory при желании. VERIFY_EMAIL не форсится: SMTP не настроен.",
   "requiredActions": [
-    {
-      "alias": "CONFIGURE_TOTP",
-      "name": "Configure OTP",
-      "enabled": true,
-      "defaultAction": true,
-      "priority": 10
-    },
-    {
-      "alias": "webauthn-register",
-      "name": "Webauthn Register",
-      "enabled": true,
-      "defaultAction": false,
-      "priority": 70
-    }
+    { "alias": "CONFIGURE_TOTP", "name": "Configure OTP", "providerId": "CONFIGURE_TOTP", "enabled": true, "defaultAction": false, "priority": 10, "config": {} },
+    { "alias": "TERMS_AND_CONDITIONS", "name": "Terms and Conditions", "providerId": "TERMS_AND_CONDITIONS", "enabled": false, "defaultAction": false, "priority": 20, "config": {} },
+    { "alias": "UPDATE_PASSWORD", "name": "Update Password", "providerId": "UPDATE_PASSWORD", "enabled": true, "defaultAction": false, "priority": 30, "config": {} },
+    { "alias": "UPDATE_PROFILE", "name": "Update Profile", "providerId": "UPDATE_PROFILE", "enabled": true, "defaultAction": false, "priority": 40, "config": {} },
+    { "alias": "VERIFY_EMAIL", "name": "Verify Email", "providerId": "VERIFY_EMAIL", "enabled": true, "defaultAction": false, "priority": 50, "config": {} },
+    { "alias": "delete_account", "name": "Delete Account", "providerId": "delete_account", "enabled": false, "defaultAction": false, "priority": 60, "config": {} },
+    { "alias": "webauthn-register", "name": "Webauthn Register", "providerId": "webauthn-register", "enabled": true, "defaultAction": false, "priority": 70, "config": {} },
+    { "alias": "update_user_locale", "name": "Update User Locale", "providerId": "update_user_locale", "enabled": true, "defaultAction": false, "priority": 1000, "config": {} }
   ],
   "groups": [
-    { "name": "netadmins",
-      "attributes": {},
-      "realmRoles": ["factory-admin"],
-      "clientRoles": {} },
-    { "name": "office-staff",
-      "attributes": {},
-      "realmRoles": ["operator"],
-      "clientRoles": {} },
-    { "name": "home-power-users",
-      "attributes": {},
-      "realmRoles": ["site-admin"],
-      "clientRoles": {} }
+    { "name": "netadmins", "attributes": {}, "realmRoles": ["factory-admin"], "clientRoles": {} },
+    { "name": "office-staff", "attributes": {}, "realmRoles": ["operator"], "clientRoles": {} },
+    { "name": "home-power-users", "attributes": {}, "realmRoles": ["site-admin"], "clientRoles": {} }
   ],
   "roles": {
     "realm": [
-      { "name": "factory-admin",
-        "description": "Полный admin фабрики (все сайты, все policy)",
-        "composite": false },
-      { "name": "site-admin",
-        "description": "Admin одного сайта/гейтвея",
-        "composite": false },
-      { "name": "operator",
-        "description": "Read + restart сервисов, без правки топологии",
-        "composite": false }
+      { "name": "factory-admin", "description": "Полный admin фабрики (все сайты, все policy)", "composite": false },
+      { "name": "site-admin", "description": "Admin одного сайта/гейтвея", "composite": false },
+      { "name": "operator", "description": "Read + restart сервисов, без правки топологии", "composite": false }
     ]
   },
-  "defaultRoles": ["offline_access", "uma_authorization"],
+  "_comment_clients": "Клиенты БЕЗ defaultClientScopes → получают стандартные realm-дефолты (profile/email/roles/web-origins/acr/basic) автоматически. groups-claim scope доназначается post-import-скриптом. redirectUris с example.com свапаются на реальный домен в setup-factory-realm.sh.",
   "clients": [
     {
       "clientId": "netbird",
@@ -89,10 +69,7 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": [
-        "https://nb.example.com/*",
-        "http://localhost:53000"
-      ],
+      "redirectUris": ["https://nb.example.com/*", "http://localhost:53000"],
       "webOrigins": ["https://nb.example.com", "+"],
       "attributes": {
         "post.logout.redirect.uris": "https://nb.example.com/+",
@@ -103,7 +80,6 @@
       },
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
-      "defaultClientScopes": ["openid", "profile", "email", "roles", "groups"],
       "protocolMappers": [
         {
           "name": "netbird-audience",
@@ -126,17 +102,13 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
-      "redirectUris": [
-        "https://media.example.com/oauth2/callback",
-        "https://*.media.example.com/oauth2/callback"
-      ],
+      "redirectUris": ["https://media.example.com/oauth2/callback", "https://*.media.example.com/oauth2/callback"],
       "webOrigins": ["https://media.example.com"],
       "attributes": {
         "post.logout.redirect.uris": "https://media.example.com/+",
         "access.token.lifespan": "3600"
       },
-      "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+      "protocol": "openid-connect"
     },
     {
       "clientId": "proxmox-msk",
@@ -146,12 +118,9 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
-      "redirectUris": [
-        "https://proxmox-msk.example.com/"
-      ],
+      "redirectUris": ["https://proxmox-msk.example.com/"],
       "webOrigins": ["https://proxmox-msk.example.com"],
-      "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+      "protocol": "openid-connect"
     },
     {
       "clientId": "proxmox-rzn",
@@ -161,12 +130,9 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
-      "redirectUris": [
-        "https://proxmox-rzn.example.com/"
-      ],
+      "redirectUris": ["https://proxmox-rzn.example.com/"],
       "webOrigins": ["https://proxmox-rzn.example.com"],
-      "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "groups"]
+      "protocol": "openid-connect"
     },
     {
       "clientId": "grafana",
@@ -176,38 +142,9 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "REPLACE-AFTER-FIRST-LOGIN-IN-UI",
       "standardFlowEnabled": true,
-      "redirectUris": [
-        "https://grafana.example.com/login/generic_oauth"
-      ],
+      "redirectUris": ["https://grafana.example.com/login/generic_oauth"],
       "webOrigins": ["https://grafana.example.com"],
-      "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "groups"]
-    }
-  ],
-  "clientScopes": [
-    {
-      "name": "groups",
-      "description": "OIDC group membership claim для ACL в NetBird/Grafana/Proxmox",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      },
-      "protocolMappers": [
-        {
-          "name": "groups",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-group-membership-mapper",
-          "consentRequired": false,
-          "config": {
-            "full.path": "false",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "claim.name": "groups",
-            "userinfo.token.claim": "true"
-          }
-        }
-      ]
+      "protocol": "openid-connect"
     }
   ],
   "smtpServer": {},
