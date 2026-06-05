@@ -103,7 +103,19 @@
       },
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
-      "defaultClientScopes": ["openid", "profile", "email", "roles", "groups"]
+      "defaultClientScopes": ["openid", "profile", "email", "roles", "groups"],
+      "protocolMappers": [
+        {
+          "name": "netbird-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "netbird",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     },
     {
       "clientId": "forward-auth-admin",
